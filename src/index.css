@@ -1,0 +1,278 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* VANNA Dark Theme - Only Mode */
+    --background: 240 20% 4%;
+    --foreground: 240 20% 94%;
+    --card: 240 10% 8%;
+    --card-foreground: 240 20% 94%;
+    --popover: 240 10% 8%;
+    --popover-foreground: 240 20% 94%;
+    --primary: 45 100% 76%;
+    --primary-foreground: 240 20% 4%;
+    --secondary: 240 6% 12%;
+    --secondary-foreground: 240 20% 94%;
+    --muted: 240 6% 12%;
+    --muted-foreground: 240 10% 40%;
+    --accent: 168 100% 50%;
+    --accent-foreground: 240 20% 4%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 6% 15%;
+    --input: 240 6% 15%;
+    --ring: 168 100% 50%;
+    --radius: 0.5rem;
+    
+    /* VANNA Custom Properties */
+    --vanna-bg: #0a0a0f;
+    --vanna-surface: #1a1a1f;
+    --vanna-surface-light: #25252c;
+    --vanna-text: #e0e0ff;
+    --vanna-text-secondary: #606080;
+    --vanna-gold: #ffdd88;
+    --vanna-gold-dim: #b8a060;
+    --vanna-green: #22c55e;
+    --vanna-red: #ef4444;
+    --vanna-cyan: #00ffcc;
+    --vanna-cyan-dim: #00bba0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-vanna-bg text-vanna-text font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--vanna-surface);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--vanna-surface-light);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--vanna-text-secondary);
+  }
+}
+
+@layer components {
+  /* Glass morphism panels */
+  .glass-panel {
+    @apply bg-vanna-surface/80 backdrop-blur-xl border border-white/5 rounded-lg;
+  }
+  
+  .glass-panel-hover {
+    @apply glass-panel transition-all duration-300;
+  }
+  
+  .glass-panel-hover:hover {
+    @apply border-vanna-cyan/50 shadow-glow-cyan;
+  }
+  
+  /* Terminal-style text */
+  .terminal-text {
+    @apply font-mono text-xs tracking-wide;
+  }
+  
+  /* All-caps headers */
+  .header-caps {
+    @apply uppercase tracking-widest text-xs font-semibold text-vanna-text-secondary;
+  }
+  
+  /* Data numbers */
+  .data-number {
+    @apply font-mono tabular-nums;
+  }
+  
+  /* Price colors */
+  .price-up {
+    @apply text-vanna-green;
+  }
+  
+  .price-down {
+    @apply text-vanna-red;
+  }
+  
+  /* Orb glow effect */
+  .orb-glow {
+    box-shadow: 
+      0 0 60px rgba(255, 221, 136, 0.4),
+      0 0 120px rgba(255, 221, 136, 0.2),
+      inset 0 0 60px rgba(255, 221, 136, 0.2);
+  }
+  
+  .orb-glow-green {
+    box-shadow: 
+      0 0 60px rgba(34, 197, 94, 0.4),
+      0 0 120px rgba(34, 197, 94, 0.2),
+      inset 0 0 60px rgba(34, 197, 94, 0.2);
+  }
+  
+  .orb-glow-red {
+    box-shadow: 
+      0 0 60px rgba(239, 68, 68, 0.4),
+      0 0 120px rgba(239, 68, 68, 0.2),
+      inset 0 0 60px rgba(239, 68, 68, 0.2);
+  }
+  
+  /* Search input glass */
+  .search-glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3;
+    @apply text-vanna-text placeholder:text-vanna-text-secondary/60;
+    @apply focus:outline-none focus:border-vanna-gold/50 focus:ring-1 focus:ring-vanna-gold/30;
+    @apply transition-all duration-300;
+  }
+  
+  /* Neon border on hover */
+  .neon-border {
+    @apply relative;
+  }
+  
+  .neon-border::before {
+    content: '';
+    @apply absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300;
+    background: linear-gradient(135deg, rgba(0, 255, 204, 0.3), transparent 50%);
+    pointer-events: none;
+  }
+  
+  .neon-border:hover::before {
+    @apply opacity-100;
+  }
+  
+  /* Stats ticker */
+  .stats-ticker {
+    @apply font-mono text-xs text-vanna-text-secondary;
+  }
+  
+  /* Vignette effect */
+  .vignette {
+    background: radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(0,0,0,0.5) 100%);
+  }
+  
+  /* Particle effect */
+  .particle {
+    @apply absolute rounded-full bg-vanna-gold/30;
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  /* Button variants */
+  .btn-gold {
+    @apply bg-vanna-gold/10 border border-vanna-gold/30 text-vanna-gold;
+    @apply hover:bg-vanna-gold/20 hover:border-vanna-gold/50;
+    @apply transition-all duration-200;
+  }
+  
+  .btn-cyan {
+    @apply bg-vanna-cyan/10 border border-vanna-cyan/30 text-vanna-cyan;
+    @apply hover:bg-vanna-cyan/20 hover:border-vanna-cyan/50;
+    @apply transition-all duration-200;
+  }
+  
+  /* Panel drag handle */
+  .drag-handle {
+    @apply cursor-move px-2 py-1 text-vanna-text-secondary hover:text-vanna-text;
+    @apply transition-colors duration-200;
+  }
+  
+  /* CSS containment on glass panels — prevents layout cascade when one panel updates */
+  .glass-panel {
+    contain: layout paint;
+  }
+
+  /* AG Grid VANNA dark theme overrides */
+  .vanna-book-grid .ag-theme-quartz-dark,
+  .vanna-book-grid.ag-theme-quartz-dark {
+    --ag-background-color: transparent;
+    --ag-foreground-color: var(--vanna-text);
+    --ag-secondary-foreground-color: var(--vanna-text-secondary);
+    --ag-header-background-color: rgba(26, 26, 31, 0.9);
+    --ag-header-foreground-color: var(--vanna-text-secondary);
+    --ag-border-color: rgba(255, 255, 255, 0.05);
+    --ag-row-hover-color: rgba(255, 255, 255, 0.03);
+    --ag-selected-row-background-color: rgba(0, 255, 204, 0.06);
+    --ag-cell-horizontal-padding: 8px;
+    --ag-font-family: 'JetBrains Mono', monospace;
+    --ag-font-size: 11px;
+    --ag-cell-flash-delay: 100ms;
+    --ag-value-change-value-highlight-background-color: rgba(255, 221, 136, 0.25);
+  }
+
+  /* Price flash animations — GPU-composited */
+  @keyframes price-flash-up {
+    0%   { background-color: rgba(34, 197, 94, 0.35); }
+    100% { background-color: transparent; }
+  }
+  @keyframes price-flash-down {
+    0%   { background-color: rgba(239, 68, 68, 0.35); }
+    100% { background-color: transparent; }
+  }
+  .price-flash-up  { animation: price-flash-up  600ms ease-out; }
+  .price-flash-down { animation: price-flash-down 600ms ease-out; }
+
+  /* Order book ladder */
+  .ladder-row {
+    @apply grid grid-cols-3 gap-2 px-2 py-0.5 text-xs;
+  }
+  
+  .ladder-bid {
+    @apply bg-vanna-green/10;
+  }
+  
+  .ladder-ask {
+    @apply bg-vanna-red/10;
+  }
+}
+
+@layer utilities {
+  /* Animation delays */
+  .animation-delay-100 { animation-delay: 100ms; }
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-500 { animation-delay: 500ms; }
+  .animation-delay-1000 { animation-delay: 1000ms; }
+  .animation-delay-2000 { animation-delay: 2000ms; }
+  .animation-delay-3000 { animation-delay: 3000ms; }
+  .animation-delay-4000 { animation-delay: 4000ms; }
+  
+  /* Text gradient */
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-vanna-gold via-vanna-gold to-vanna-gold-dim bg-clip-text text-transparent;
+  }
+  
+  /* Backdrop blur utilities */
+  .backdrop-blur-vanna {
+    backdrop-filter: blur(20px);
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
