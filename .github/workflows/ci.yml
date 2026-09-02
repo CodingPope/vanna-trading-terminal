@@ -20,22 +20,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: yarn
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Lint
-        run: npm run lint
+        run: yarn lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: yarn tsc -b --force
 
       - name: Unit tests
-        run: npm run test:run
+        run: yarn test:run
 
       - name: Build
-        run: npm run build
+        run: yarn build
 
       - name: Upload build artifact
         if: github.ref == 'refs/heads/main'

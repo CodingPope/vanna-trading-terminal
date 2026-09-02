@@ -4,12 +4,12 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Install deps first (layer cache: only re-runs when lockfile changes)
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --ignore-scripts
 
 # Copy source and build
 COPY . .
-RUN npm run build
+RUN yarn build
 
 # ── Stage 2: serve ────────────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS server
