@@ -53,12 +53,15 @@ anyone who opens the Actions tab sees a red X before they read a line of code.
       `vite.config.ts`, injects inspector attributes into every element, and ships in
       the production bundle. It announces the project was built in an AI IDE.
 
-- [ ] **Rewrite the README.** It is still Vite boilerplate with one sentence changed.
+- [x] **Rewrite the README.** It is still Vite boilerplate with one sentence changed.
       This is the highest-ROI file in the repo.
-  - [ ] Screenshot or GIF of the terminal running, at the top
-  - [ ] Live demo link
-  - [ ] Architecture diagram of the data path
-  - [ ] Short "why these choices" section: snapshot-then-delta, sequence validation,
+  - [ ] Screenshot or GIF of the terminal running, at the top — **still needed.** The
+        README has a commented placeholder pointing at `docs/screenshot.png`; drop the
+        file in and uncomment the line.
+  - [ ] Live demo link — blocked on the deploy above.
+  - [x] Architecture diagram of the data path (mermaid, renders on GitHub). It shows the
+        streaming path as dashed/unwired, because that is the truth right now.
+  - [x] Short "why these choices" section: snapshot-then-delta, sequence validation,
         backpressure. This is the interview conversation, pre-loaded.
 
 - [ ] **Deploy it.** Railway or Fly. The Dockerfile and nginx config already exist and
@@ -138,6 +141,11 @@ Target: 2 to 3 days.
       each other. Session VWAP most likely should accumulate from bar 0 regardless of the
       anchor. (The O(n²) inner loop that recomputed the anchored sum per bar is already
       gone — it is a single O(n) pass now, same output.)
+
+- [ ] **Delete `src/components/Orb.tsx`.** Nothing imports it. `LandingPage` uses
+      `DisplacementOrb`, and `Header` imports `OrbIndicator` from `DisplacementOrb` too —
+      so the `OrbIndicator` in `Orb.tsx` is a second, unreachable copy. Confirm it is
+      genuinely superseded rather than mid-migration, then remove it.
 
 - [ ] **One Playwright path:** land, enter terminal, place order, see fill.
 
