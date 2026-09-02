@@ -1,5 +1,6 @@
 import { useDeferredValue } from 'react';
-import { useMarket } from '@/store';
+import { useAppSelector } from '@/store/hooks';
+import { selectFocusList, selectSelectedSymbol } from '@/store/selectors';
 import {
   CheckCircle2,
   XCircle,
@@ -16,11 +17,12 @@ interface AnaPanelProps {
 }
 
 export function AnaPanel({ symbol: propSymbol }: AnaPanelProps) {
-  const { state } = useMarket();
-  const symbol = propSymbol || state.selectedSymbol;
+  const focusList = useAppSelector(selectFocusList);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const symbol = propSymbol || selectedSymbol;
 
   // Get focus item for this symbol
-  const focusItem = state.focusList.find(item => item.symbol === symbol);
+  const focusItem = focusList.find(item => item.symbol === symbol);
   const analysis = focusItem?.anaAnalysis;
 
   // useDeferredValue defers the re-render of the heavy analysis UI when the

@@ -11,6 +11,18 @@ export const selectMarketRegime = (state: RootState) => state.market.marketRegim
 export const selectStats = (state: RootState) => state.market.stats;
 export const selectIsConnected = (state: RootState) => state.market.isConnected;
 export const selectAllCandlesticks = (state: RootState) => state.market.candlesticks;
+export const selectLastUpdate = (state: RootState) => state.market.lastUpdate;
+
+/**
+ * Market data as a Map, for the few consumers that iterate or `.get()` across
+ * every symbol. Memoized on the entities record, so the Map is rebuilt only
+ * when market data actually changes — but note that is every tick, so prefer
+ * `selectMarketData(state, symbol)` wherever a single symbol will do.
+ */
+export const selectMarketDataMap = createSelector(
+  [selectAllMarketEntities],
+  (entities) => new Map(Object.entries(entities))
+);
 
 /** Memoized per-symbol market data. */
 export const selectMarketData = createSelector(

@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { useMarket } from '@/store';
+import { useAppSelector } from '@/store/hooks';
+import { selectSelectedSymbol, selectOrderBook, selectMarketData } from '@/store/selectors';
+import type { RootState } from '@/store/store';
 import {
   Area,
   AreaChart,
@@ -27,10 +29,10 @@ function byAskPriceAsc(a: OrderBookEntry, b: OrderBookEntry): number {
 }
 
 export function DepthChartPanel({ symbol: propSymbol }: { symbol?: string }) {
-  const { state, getMarketData, getOrderBook } = useMarket();
-  const symbol = propSymbol ?? state.selectedSymbol;
-  const marketData = getMarketData(symbol);
-  const book = getOrderBook(symbol);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const symbol = propSymbol ?? selectedSymbol;
+  const marketData = useAppSelector((s: RootState) => selectMarketData(s, symbol));
+  const book = useAppSelector((s: RootState) => selectOrderBook(s, symbol));
 
   const data = useMemo(() => {
     const bids = book.filter(l => l.side === 'bid').sort(byBidPriceDesc).slice(0, 20);

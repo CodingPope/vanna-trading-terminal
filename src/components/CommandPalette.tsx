@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useUI, useMarket } from '@/store';
+import { useUI } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectMarketDataMap } from '@/store/selectors';
 import { Search, TrendingUp, Bell, Settings, User } from 'lucide-react';
 
 interface CommandItem {
@@ -13,7 +15,8 @@ interface CommandItem {
 
 export function CommandPalette() {
   const { state: uiState, toggleCommandPalette, setView } = useUI();
-  const { state: marketState, setSelectedSymbol, setPhase } = useMarket();
+  const marketData = useAppSelector(selectMarketDataMap);
+  const { setSelectedSymbol, setPhase } = useMarketActions();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +136,7 @@ export function CommandPalette() {
   ];
 
   // Add symbol commands
-  const symbolCommands: CommandItem[] = Array.from(marketState.marketData.keys()).map(symbol => ({
+  const symbolCommands: CommandItem[] = Array.from(marketData.keys()).map(symbol => ({
     id: `symbol-${symbol}`,
     label: `View ${symbol}`,
     description: `Open ${symbol} chart and analysis`,

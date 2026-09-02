@@ -1,9 +1,10 @@
-import { useMarket } from '@/store';
+import { useAppSelector } from '@/store/hooks';
+import { selectStats, selectIsConnected } from '@/store/selectors';
 import { Activity, Cpu, Wifi, Clock } from 'lucide-react';
 
 export function StatsFooter() {
-  const { state } = useMarket();
-  const { stats, isConnected } = state;
+  const stats = useAppSelector(selectStats);
+  const isConnected = useAppSelector(selectIsConnected);
 
   return (
     <footer className="h-7 bg-vanna-surface/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-between px-3 text-[10px] font-mono">

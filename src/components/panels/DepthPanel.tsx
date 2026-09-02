@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { useMarket } from '@/store';
+import { useAppSelector } from '@/store/hooks';
+import { selectSelectedSymbol, selectOrderBook } from '@/store/selectors';
+import type { RootState } from '@/store/store';
 import type { OrderBookEntry } from '@/types';
 
 interface DepthRow {
@@ -20,9 +22,9 @@ function byAskPriceAsc(a: OrderBookEntry, b: OrderBookEntry): number {
 }
 
 export function DepthPanel({ symbol: propSymbol }: { symbol?: string }) {
-  const { state, getOrderBook } = useMarket();
-  const symbol = propSymbol ?? state.selectedSymbol;
-  const book = getOrderBook(symbol);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const symbol = propSymbol ?? selectedSymbol;
+  const book = useAppSelector((s: RootState) => selectOrderBook(s, symbol));
 
   const { rows, maxSize, totalBid, totalAsk } = useMemo(() => {
     const bids = book.filter(b => b.side === 'bid').sort(byBidPriceDesc).slice(0, 15);

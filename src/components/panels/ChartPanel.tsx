@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import { useMarket } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectSelectedSymbol, selectMarketData, selectCandlesticks } from '@/store/selectors';
+import type { RootState } from '@/store/store';
 import { LightweightChart } from './LightweightChart';
 import {
   BarChart3,
@@ -173,8 +175,9 @@ function VolumeProfileLayer({
 }
 
 export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
-  const { state, getMarketData, getCandlesticks, addAlert } = useMarket();
-  const symbol = propSymbol || state.selectedSymbol;
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const { addAlert } = useMarketActions();
+  const symbol = propSymbol || selectedSymbol;
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [showVolume, setShowVolume] = useState(true);
@@ -183,8 +186,8 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
   const [hover, setHover] = useState<{ x: number; y: number; price: number; time: string; ts: number } | null>(null);
   const [useLightweight, setUseLightweight] = useState(true); // TradingView by default
 
-  const marketData = getMarketData(symbol);
-  const candlesticks = getCandlesticks(symbol);
+  const marketData = useAppSelector((s: RootState) => selectMarketData(s, symbol));
+  const candlesticks = useAppSelector((s: RootState) => selectCandlesticks(s, symbol));
 
   const chartData = useMemo(() => {
     return candlesticks.map(candle => ({

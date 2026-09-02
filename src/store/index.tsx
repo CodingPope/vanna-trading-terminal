@@ -1,21 +1,22 @@
 import React from 'react';
 import { Provider } from 'react-redux';
 import { store } from './store';
-import { MarketProvider } from './MarketStore';
+import { MarketFeedProvider } from './marketFeed';
 import { UIProvider } from './UIContext';
 
-export * from './MarketStore';
+export * from './constants';
 export * from './UIContext';
 export * from './store';
 export * from './selectors';
+export * from './hooks';
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   return (
     <Provider store={store}>
       <UIProvider>
-        <MarketProvider>
+        <MarketFeedProvider>
           {children}
-        </MarketProvider>
+        </MarketFeedProvider>
       </UIProvider>
     </Provider>
   );

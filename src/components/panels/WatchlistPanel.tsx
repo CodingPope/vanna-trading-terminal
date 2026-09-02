@@ -1,5 +1,6 @@
 import { useState, useMemo, memo } from 'react';
-import { useMarket } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectMarketDataMap, selectSelectedSymbol, selectLastUpdate } from '@/store/selectors';
 import { ArrowUp, ArrowDown, Star, MoreHorizontal, Filter } from 'lucide-react';
 import type { MarketData } from '@/types';
 
@@ -46,12 +47,15 @@ interface WatchlistPanelProps {
 }
 
 export function WatchlistPanel({ onSelectSymbol }: WatchlistPanelProps) {
-  const { state, setSelectedSymbol } = useMarket();
+  const marketData = useAppSelector(selectMarketDataMap);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const lastUpdate = useAppSelector(selectLastUpdate);
+  const { setSelectedSymbol } = useMarketActions();
   const [filter, setFilter] = useState<'all' | 'gainers' | 'losers' | 'volume'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   const symbols = useMemo(() => {
-    let data = Array.from(state.marketData.entries());
+    let data = Array.from(marketData.entries());
     
     // Apply filter
     switch (filter) {
@@ -79,7 +83,7 @@ export function WatchlistPanel({ onSelectSymbol }: WatchlistPanelProps) {
     }
     
     return data;
-  }, [state.marketData, filter, searchTerm]);
+  }, [marketData, filter, searchTerm]);
 
   const handleSelect = (symbol: string) => {
     setSelectedSymbol(symbol);
@@ -150,7 +154,7 @@ export function WatchlistPanel({ onSelectSymbol }: WatchlistPanelProps) {
             key={symbol}
             symbol={symbol}
             data={data}
-            isSelected={state.selectedSymbol === symbol}
+            isSelected={selectedSymbol === symbol}
             onSelect={handleSelect}
           />
         ))}
@@ -158,7 +162,7 @@ export function WatchlistPanel({ onSelectSymbol }: WatchlistPanelProps) {
 
       {/* Footer */}
       <div className="px-3 py-2 border-t border-white/5 text-[10px] text-vanna-text-secondary">
-        {symbols.length} symbols • Last update: {new Date(state.lastUpdate).toLocaleTimeString()}
+        {symbols.length} symbols • Last update: {new Date(lastUpdate).toLocaleTimeString()}
       </div>
     </div>
   );
