@@ -32,7 +32,9 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
   const marketData = getMarketData(symbol);
   const [trades, setTrades] = useState<TradePrint[]>([]);
   const prevPriceRef = useRef<number | null>(null);
+  const prevSymbolRef = useRef<string | null>(null);
 
+  // Reseed the tape when the selected symbol changes.
   useEffect(() => {
     const base = marketData?.price ?? 100;
     const now = Date.now();
@@ -48,14 +50,17 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
         side,
       };
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- full tape reset on symbol switch, not a per-tick update
     setTrades(seeded);
-    prevPriceRef.current = base;
-  }, [symbol, marketData?.price]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed only on symbol change, not every price tick
+  }, [symbol]);
 
   useEffect(() => {
     if (!marketData) return;
 
-    const prev = prevPriceRef.current ?? marketData.price;
+    const symbolChanged = prevSymbolRef.current !== symbol;
+    prevSymbolRef.current = symbol;
+    const prev = symbolChanged || prevPriceRef.current === null ? marketData.price : prevPriceRef.current;
     const delta = marketData.price - prev;
     const side: TradePrint['side'] = delta >= 0 ? 'buy' : 'sell';
     const intensity = Math.min(3, Math.max(1, Math.round(Math.abs(delta) * 30)));

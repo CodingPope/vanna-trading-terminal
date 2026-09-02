@@ -21,7 +21,14 @@ import { DepthChartPanel } from '@/components/panels/DepthChartPanel';
 import type { Panel } from '@/types';
 
 // Panel component mapping
-const PANEL_COMPONENTS: Record<Panel['type'], React.ComponentType<any>> = {
+// Panels are rendered without props; every prop any of them accepts is optional.
+type PanelComponentProps = {
+  symbol?: string;
+  compact?: boolean;
+  onSelectSymbol?: (symbol: string) => void;
+};
+
+const PANEL_COMPONENTS: Record<Panel['type'], React.ComponentType<PanelComponentProps>> = {
   watchlist: WatchlistPanel,
   ticker: TickerPanel,
   chart: ChartPanel,
@@ -174,12 +181,6 @@ export function Dashboard() {
     const stored = localStorage.getItem('vanna:layout-mode');
     return stored === 'grid' || stored === 'free' ? stored : 'free';
   });
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(() => state.currentWorkspaceId);
-
-  useEffect(() => {
-    setSelectedWorkspace(state.currentWorkspaceId);
-  }, [state.currentWorkspaceId]);
-
   useEffect(() => {
     localStorage.setItem('vanna:layout-mode', layoutMode);
   }, [layoutMode]);
@@ -197,7 +198,6 @@ export function Dashboard() {
     if (!name) return;
     const ws = saveWorkspace(name, layoutMode);
     if (ws) {
-      setSelectedWorkspace(ws.id);
       localStorage.setItem('vanna:layout-mode', ws.layoutMode);
     }
   };
@@ -205,18 +205,16 @@ export function Dashboard() {
   const handleLoadWorkspace = (id: string) => {
     const ws = loadWorkspace(id);
     if (ws) {
-      setSelectedWorkspace(ws.id);
       setLayoutMode(ws.layoutMode);
       localStorage.setItem('vanna:layout-mode', ws.layoutMode);
     }
   };
 
   const handleDeleteWorkspace = () => {
-    if (!selectedWorkspace) return;
+    if (!state.currentWorkspaceId) return;
     const confirmDelete = window.confirm('Delete this workspace?');
     if (!confirmDelete) return;
-    deleteWorkspace(selectedWorkspace);
-    setSelectedWorkspace(null);
+    deleteWorkspace(state.currentWorkspaceId);
   };
 
   const handlePanelUpdate = useCallback((updatedPanel: Panel) => {
@@ -269,7 +267,7 @@ export function Dashboard() {
             Reset
           </button>
           <select
-            value={selectedWorkspace || ''}
+            value={state.currentWorkspaceId || ''}
             onChange={(e) => handleLoadWorkspace(e.target.value)}
             className="ml-2 px-2 py-1 text-[10px] rounded bg-vanna-surface-light/40 border border-white/10 text-vanna-text"
           >
