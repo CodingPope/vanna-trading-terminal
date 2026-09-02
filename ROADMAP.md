@@ -11,6 +11,41 @@ Build for exactly those two. Skip everything else.
 
 ---
 
+## Execution order
+
+Agreed 2026-09-02. Deliberately **not** tier order. Everything that does not need a
+backend happens first, because it makes the backend step smaller rather than larger.
+
+The reasoning: `MarketStore.tsx` (292 lines) holds the Context bridge *and* the mock feed
+in one file, so "kill the bridge" and "replace the mock" are the same surgery — done
+separately you touch 9 panels twice. And because the mock already dispatches into the
+Redux store, migrating those panels onto selectors does **not** depend on where the data
+comes from. Do it against the mock today, and `MarketStore` shrinks to a thin feed
+adapter; swapping mock → WebSocket later becomes a substitution, not a refactor.
+
+Note the goal right now is not removing the mock — nothing can remove it before the
+backend exists, or the app is dead. The goal is making it **swappable**.
+
+**Phase A — frontend, no backend needed**
+1. Hygiene batch: delete dead `Orb.tsx`, settle `VANNA_STACK.md`, bump GH actions to `@v5`
+2. Migrate the 9 `useMarket` panels onto selectors; shrink `MarketStore` to feed-only.
+   Also ends the per-tick re-render of the 10 panels that do not use `useSelector`.
+3. Consolidate UI state (`UIContext` → Zustand, 20 files). Order entry lands on whichever wins.
+4. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
+
+**Phase B — backend**
+
+5. FastAPI backend + `GET /api/snapshot` + WS, two-service compose
+6. Swap the feed. The fabricated stats in `MarketStore` die here for free.
+7. Chaos toggle (gaps, disconnects, burst)
+8. Order entry + blotter
+9. Playwright happy path
+
+**Deferred by choice:** deploy, screenshot, demo link. Not until the project is close to
+done — the work so far is not visual, so there is nothing worth showing yet.
+
+---
+
 ## Tier 1: Stop the bleeding
 
 Target: 2 days. Nothing below this tier matters until all six are done, because right now
