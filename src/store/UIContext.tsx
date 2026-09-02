@@ -101,13 +101,14 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       return { ...state, searchResults: action.payload };
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.payload } };
-    case 'ADD_NOTIFICATION':
+    case 'ADD_NOTIFICATION': {
       const newNotification: Notification = {
         ...action.payload,
         id: Math.random().toString(36).substr(2, 9),
         timestamp: Date.now(),
       };
       return { ...state, notifications: [newNotification, ...state.notifications].slice(0, 10) };
+    }
     case 'REMOVE_NOTIFICATION':
       return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
     case 'SET_LOADING':

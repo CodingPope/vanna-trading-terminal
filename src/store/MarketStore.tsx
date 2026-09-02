@@ -146,11 +146,13 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
 
   // ── Keep a ref of current entities for use inside the rAF loop ────────────
   const entitiesRef = useRef(marketEntities);
-  entitiesRef.current = marketEntities;
+  useEffect(() => {
+    entitiesRef.current = marketEntities;
+  }, [marketEntities]);
 
   // ── Mock WebSocket simulation (replaced by real WS in Phase 1.4) ──────────
   const frameRef = useRef<number>(0);
-  const lastUpdateRef = useRef<number>(Date.now());
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     dispatch(rtkSetConnected(true));
@@ -200,7 +202,6 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
     frameRef.current = requestAnimationFrame(updateData);
     return () => cancelAnimationFrame(frameRef.current);
   // Run once on mount only — entities are read via ref
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
   // ── Stats updater ─────────────────────────────────────────────────────────

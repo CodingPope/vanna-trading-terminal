@@ -15,6 +15,14 @@ export function Orb({ size = 120, className = '' }: OrbProps) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHovering, setIsHovering] = useState(false);
   const [marketRegime, setMarketRegime] = useState<'neutral' | 'bullish' | 'bearish'>('neutral');
+  const [particles] = useState(() =>
+    Array.from({ length: 12 }, () => ({
+      opacity: 0.3 + Math.random() * 0.4,
+      left: 50 + (Math.random() - 0.5) * 80,
+      top: 50 + (Math.random() - 0.5) * 80,
+      duration: 4 + Math.random() * 4,
+    }))
+  );
 
   // Simulate market regime changes
   useEffect(() => {
@@ -113,16 +121,16 @@ export function Orb({ size = 120, className = '' }: OrbProps) {
     >
       {/* Particle effects */}
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(12)].map((_, i) => (
+        {particles.map((particle, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 rounded-full"
             style={{
               background: colors.core,
-              opacity: 0.3 + Math.random() * 0.4,
-              left: `${50 + (Math.random() - 0.5) * 80}%`,
-              top: `${50 + (Math.random() - 0.5) * 80}%`,
-              animation: `float ${4 + Math.random() * 4}s ease-in-out infinite`,
+              opacity: particle.opacity,
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              animation: `float ${particle.duration}s ease-in-out infinite`,
               animationDelay: `${i * 0.3}s`,
             }}
           />

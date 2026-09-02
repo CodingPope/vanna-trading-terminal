@@ -31,6 +31,147 @@ interface ChartPanelProps {
 type ChartType = 'candlestick' | 'line' | 'area';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d' | '1w';
 
+interface ChartDatum {
+  time: string;
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  change: number;
+  vwap?: number;
+  anchoredVwap?: number;
+}
+
+// Recharts injects its internal axis maps into <Customized component={...} />.
+// Only the pieces used below are typed.
+type AxisScale = ((value: number | string) => number) & { bandwidth?: () => number };
+
+interface RechartsAxis {
+  scale?: AxisScale;
+  bandSize?: number;
+}
+
+interface CustomizedProps {
+  xAxisMap?: Record<string, RechartsAxis>;
+  yAxisMap?: Record<string, RechartsAxis>;
+  data?: ChartDatum[];
+  width?: number;
+}
+
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: ChartDatum }>;
+}) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="glass-panel p-2 text-xs">
+      <p className="text-vanna-text-secondary mb-1">{data.time}</p>
+      <div className="space-y-0.5 font-mono">
+        <p className="text-vanna-text">O: {data.open.toFixed(2)}</p>
+        <p className="text-vanna-text">H: {data.high.toFixed(2)}</p>
+        <p className="text-vanna-text">L: {data.low.toFixed(2)}</p>
+        <p className={`${data.close >= data.open ? 'text-vanna-green' : 'text-vanna-red'}`}>
+          C: {data.close.toFixed(2)}
+        </p>
+        <p className="text-vanna-text-secondary">V: {(data.volume / 1000).toFixed(0)}K</p>
+      </div>
+    </div>
+  );
+}
+
+// Custom candlestick renderer using Recharts Customized
+function CandleLayer({ xAxisMap, yAxisMap, data }: CustomizedProps) {
+  if (!data || !xAxisMap || !yAxisMap) return null;
+  const xAxis = xAxisMap[Object.keys(xAxisMap)[0]];
+  const yAxis = yAxisMap['price'] || yAxisMap[Object.keys(yAxisMap)[0]];
+  const xScale = xAxis?.scale;
+  const yScale = yAxis?.scale;
+  if (!xScale || !yScale) return null;
+
+  const band = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : (xAxis.bandSize || 8);
+  const candleWidth = Math.min(18, band * 0.7 || 10);
+
+  return (
+    <g>
+      {data.map((d, idx) => {
+        const cx = xScale(d.time) + (band ? band / 2 : 0);
+        const yOpen = yScale(d.open);
+        const yClose = yScale(d.close);
+        const yHigh = yScale(d.high);
+        const yLow = yScale(d.low);
+        const bodyTop = Math.min(yOpen, yClose);
+        const bodyHeight = Math.max(Math.abs(yOpen - yClose), 1);
+        const isUp = d.close >= d.open;
+        const bodyColor = isUp ? '#18f3c8' : '#f25f5c';
+
+        return (
+          <g key={idx}>
+            {/* wick */}
+            <line
+              x1={cx}
+              x2={cx}
+              y1={yHigh}
+              y2={yLow}
+              stroke={bodyColor}
+              strokeWidth={1}
+              opacity={0.9}
+            />
+            {/* body */}
+            <rect
+              x={cx - candleWidth / 2}
+              y={bodyTop}
+              width={candleWidth}
+              height={bodyHeight}
+              fill={bodyColor}
+              opacity={0.9}
+              rx={1}
+            />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function VolumeProfileLayer({
+  yAxisMap,
+  width,
+  profile,
+}: CustomizedProps & { profile: Array<{ y: number; vol: number; pct: number }> }) {
+  const yAxis = yAxisMap?.['price'] || Object.values(yAxisMap || {})[0];
+  const yScale = yAxis?.scale;
+  if (!yScale) return null;
+  const railX = (width || 0) - 50;
+  return (
+    <g>
+      {profile.map((b, idx) => {
+        const y = yScale(b.y);
+        const nextY = yScale(b.y + ((profile[1]?.y ?? b.y) - b.y)) || y + 10;
+        const barHeight = Math.abs(nextY - y) || 8;
+        const barWidth = 40 * b.pct;
+        return (
+          <rect
+            key={idx}
+            x={railX}
+            y={y - barHeight / 2}
+            width={barWidth}
+            height={barHeight * 0.8}
+            fill="url(#colorVolume)"
+            opacity={0.4}
+            rx={2}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
   const { state, getMarketData, getCandlesticks, addAlert } = useMarket();
   const symbol = propSymbol || state.selectedSymbol;
@@ -67,31 +208,36 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
 
   // VWAP & anchored VWAP
   const chartDataWithVWAP = useMemo(() => {
-    let cumPV = 0;
-    let cumVol = 0;
     let anchorIndex = 0;
     if (anchorTs) {
       anchorIndex = chartData.findIndex(d => d.timestamp >= anchorTs);
       if (anchorIndex < 0) anchorIndex = 0;
     }
-    return chartData.map((d, idx) => {
-      if (idx < anchorIndex) return { ...d, vwap: undefined, anchoredVwap: undefined };
+
+    const out: ChartDatum[] = [];
+    let cumPV = 0;
+    let cumVol = 0;
+    let anchoredPV = 0;
+    let anchoredVol = 0;
+
+    for (let idx = 0; idx < chartData.length; idx++) {
+      const d = chartData[idx];
+      if (idx < anchorIndex) {
+        out.push({ ...d, vwap: undefined, anchoredVwap: undefined });
+        continue;
+      }
       const typical = (d.high + d.low + d.close) / 3;
       cumPV += typical * d.volume;
       cumVol += d.volume;
-      const vwap = cumVol ? cumPV / cumVol : d.close;
-
-      let aPV = 0;
-      let aVol = 0;
-      for (let j = anchorIndex; j <= idx; j++) {
-        const td = chartData[j];
-        const ttyp = (td.high + td.low + td.close) / 3;
-        aPV += ttyp * td.volume;
-        aVol += td.volume;
-      }
-      const anchoredVwap = aVol ? aPV / aVol : d.close;
-      return { ...d, vwap, anchoredVwap };
-    });
+      anchoredPV += typical * d.volume;
+      anchoredVol += d.volume;
+      out.push({
+        ...d,
+        vwap: cumVol ? cumPV / cumVol : d.close,
+        anchoredVwap: anchoredVol ? anchoredPV / anchoredVol : d.close,
+      });
+    }
+    return out;
   }, [chartData, anchorTs]);
 
   // Volume profile (simple binned)
@@ -114,82 +260,6 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
     const maxVol = Math.max(...bins.map(b => b.vol), 1);
     return bins.map(b => ({ ...b, pct: b.vol / maxVol }));
   }, [chartData]);
-
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: typeof chartData[0] }> }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="glass-panel p-2 text-xs">
-          <p className="text-vanna-text-secondary mb-1">{data.time}</p>
-          <div className="space-y-0.5 font-mono">
-            <p className="text-vanna-text">O: {data.open.toFixed(2)}</p>
-            <p className="text-vanna-text">H: {data.high.toFixed(2)}</p>
-            <p className="text-vanna-text">L: {data.low.toFixed(2)}</p>
-            <p className={`${data.close >= data.open ? 'text-vanna-green' : 'text-vanna-red'}`}>
-              C: {data.close.toFixed(2)}
-            </p>
-            <p className="text-vanna-text-secondary">V: {(data.volume / 1000).toFixed(0)}K</p>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Custom candlestick renderer using Recharts Customized
-  const CandleLayer = (props: any) => {
-    const { xAxisMap, yAxisMap, data } = props;
-    if (!data || !xAxisMap || !yAxisMap) return null;
-    const xAxis = xAxisMap[Object.keys(xAxisMap)[0]];
-    const yAxis = yAxisMap['price'] || yAxisMap[Object.keys(yAxisMap)[0]];
-    const xScale = xAxis?.scale;
-    const yScale = yAxis?.scale;
-    if (!xScale || !yScale) return null;
-
-    const band = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : (xAxis.bandSize || 8);
-    const candleWidth = Math.min(18, band * 0.7 || 10);
-
-    return (
-      <g>
-        {data.map((d: any, idx: number) => {
-          const cx = xScale(d.time) + (band ? band / 2 : 0);
-          const yOpen = yScale(d.open);
-          const yClose = yScale(d.close);
-          const yHigh = yScale(d.high);
-          const yLow = yScale(d.low);
-          const bodyTop = Math.min(yOpen, yClose);
-          const bodyHeight = Math.max(Math.abs(yOpen - yClose), 1);
-          const isUp = d.close >= d.open;
-          const bodyColor = isUp ? '#18f3c8' : '#f25f5c';
-
-          return (
-            <g key={idx}>
-              {/* wick */}
-              <line
-                x1={cx}
-                x2={cx}
-                y1={yHigh}
-                y2={yLow}
-                stroke={bodyColor}
-                strokeWidth={1}
-                opacity={0.9}
-              />
-              {/* body */}
-              <rect
-                x={cx - candleWidth / 2}
-                y={bodyTop}
-                width={candleWidth}
-                height={bodyHeight}
-                fill={bodyColor}
-                opacity={0.9}
-                rx={1}
-              />
-            </g>
-          );
-        })}
-      </g>
-    );
-  };
 
   return (
     <div className="h-full flex flex-col">
@@ -447,36 +517,7 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
             )}
 
             {/* Volume profile (right rail) */}
-            <Customized
-              component={({ yAxisMap, width }: any) => {
-                const yAxis = yAxisMap['price'] || Object.values(yAxisMap || {})[0];
-                const yScale = yAxis?.scale;
-                if (!yScale) return null;
-                const railX = (width || 0) - 50;
-                return (
-                  <g>
-                    {volumeProfile.map((b, idx) => {
-                      const y = yScale(b.y);
-                      const nextY = yScale(b.y + ((volumeProfile[1]?.y ?? b.y) - b.y)) || y + 10;
-                      const barHeight = Math.abs(nextY - y) || 8;
-                      const barWidth = 40 * b.pct;
-                      return (
-                        <rect
-                          key={idx}
-                          x={railX}
-                          y={y - barHeight / 2}
-                          width={barWidth}
-                          height={barHeight * 0.8}
-                          fill="url(#colorVolume)"
-                          opacity={0.4}
-                          rx={2}
-                        />
-                      );
-                    })}
-                  </g>
-                );
-              }}
-            />
+            <Customized component={<VolumeProfileLayer profile={volumeProfile} />} />
           </ComposedChart>
         </ResponsiveContainer>}
       </div>

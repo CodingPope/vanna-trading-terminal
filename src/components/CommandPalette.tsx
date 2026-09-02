@@ -18,18 +18,20 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Reset local state when the palette transitions to closed.
+  const [wasOpen, setWasOpen] = useState(uiState.showCommandPalette);
+  if (uiState.showCommandPalette !== wasOpen) {
+    setWasOpen(uiState.showCommandPalette);
+    if (!uiState.showCommandPalette) {
+      setSearchQuery('');
+      setSelectedIndex(0);
+    }
+  }
+
   // Focus input when opened
   useEffect(() => {
     if (uiState.showCommandPalette) {
       setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [uiState.showCommandPalette]);
-
-  // Reset when closed
-  useEffect(() => {
-    if (!uiState.showCommandPalette) {
-      setSearchQuery('');
-      setSelectedIndex(0);
     }
   }, [uiState.showCommandPalette]);
 

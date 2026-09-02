@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { DisplacementOrb } from '@/components/DisplacementOrb';
 import { useUI } from '@/store';
 import { Sparkles } from 'lucide-react';
 
 export function LandingPage() {
   const { state, enterDashboard } = useUI();
-  const [showParticles, setShowParticles] = useState(false);
-
-  useEffect(() => {
-    setShowParticles(true);
-  }, []);
+  const [particles] = useState(() =>
+    Array.from({ length: 24 }, () => ({
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      duration: 5 + Math.random() * 10,
+      delay: Math.random() * 5,
+      opacity: 0.35 + Math.random() * 0.3,
+    }))
+  );
 
   return (
     <div 
@@ -20,23 +24,21 @@ export function LandingPage() {
       <div className="absolute inset-0 vignette pointer-events-none" />
 
       {/* Floating particles */}
-      {showParticles && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {[...Array(24)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-1 rounded-full bg-vanna-gold/40"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animation: `float ${5 + Math.random() * 10}s ease-in-out infinite`,
-                animationDelay: `${Math.random() * 5}s`,
-                opacity: 0.35 + Math.random() * 0.3,
-              }}
-            />
-          ))}
-        </div>
-      )}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {particles.map((particle, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 rounded-full bg-vanna-gold/40"
+            style={{
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              animation: `float ${particle.duration}s ease-in-out infinite`,
+              animationDelay: `${particle.delay}s`,
+              opacity: particle.opacity,
+            }}
+          />
+        ))}
+      </div>
 
       {/* Main content */}
       <div className="relative z-10 flex flex-col items-center gap-10 px-4 pb-16">

@@ -221,18 +221,19 @@ export function LightweightChart({
     });
   }, []);
 
-  // When marketData changes, update the last candle in real-time
+  // When the price changes, update the last candle in real-time
+  const price = marketData?.price;
   useEffect(() => {
-    if (!marketData || !candlesticks.length) return;
+    if (price === undefined || !candlesticks.length) return;
     const last = candlesticks[candlesticks.length - 1];
     if (!last) return;
     scheduleUpdate({
       ...last,
-      close: marketData.price,
-      high: Math.max(last.high, marketData.price),
-      low: Math.min(last.low, marketData.price),
+      close: price,
+      high: Math.max(last.high, price),
+      low: Math.min(last.low, price),
     });
-  }, [marketData?.price, candlesticks, scheduleUpdate]);
+  }, [price, candlesticks, scheduleUpdate]);
 
   return (
     <div
