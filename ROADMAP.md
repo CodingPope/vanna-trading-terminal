@@ -27,9 +27,10 @@ Note the goal right now is not removing the mock — nothing can remove it befor
 backend exists, or the app is dead. The goal is making it **swappable**.
 
 **Phase A — frontend, no backend needed**
-1. Hygiene batch: delete dead `Orb.tsx`, settle `VANNA_STACK.md`, bump GH actions to `@v5`
-2. Migrate the 9 `useMarket` panels onto selectors; shrink `MarketStore` to feed-only.
-   Also ends the per-tick re-render of the 10 panels that do not use `useSelector`.
+1. ~~Hygiene batch: delete dead `Orb.tsx`, settle `VANNA_STACK.md`, bump GH actions to `@v5`~~ **done**
+2. ~~Migrate the `useMarket` consumers onto selectors; shrink `MarketStore` to feed-only.~~
+   **done** — it was 15 call sites, not 9. `MarketStore.tsx` is gone, split into
+   `store/hooks.ts`, `store/marketFeed.tsx` (the feed seam) and `store/constants.ts`.
 3. Consolidate UI state (`UIContext` → Zustand, 20 files). Order entry lands on whichever wins.
 4. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
 
@@ -154,20 +155,19 @@ Target: 2 to 3 days.
       hold near-identical shapes. Keep Zustand, migrate the 20, delete the Context.
       An abandoned half-migration reads worse than either choice alone.
 
-- [ ] **Kill the `MarketStore` Context bridge.** It self-describes as a
-      "backward-compatible Context bridge over Redux Toolkit" and exposes
-      `dispatch: React.Dispatch<any>` with an eslint-disable. Only `OrderBookPanel` and
-      `PositionsPanel` call `useSelector`; the other ten panels re-render on every market
-      change. RTK and Reselect were installed to avoid exactly this and then routed around.
+- [x] **Kill the `MarketStore` Context bridge.** Done. All 15 call sites now read
+      through selectors; the provider reads entities via `store.getState()` so it no
+      longer re-renders on ticks. Swapping the mock feed for the real transport is now a
+      change to one function body in `store/marketFeed.tsx`.
 
 - [ ] **Replace the fabricated stats.** `websocket.ts` dispatches a hardcoded
       `fps: 60, renderTime: 0` on every pong, and the UI displays it as measured.
       Wire to a real rAF counter and `PerformanceObserver`, or delete the fields.
       Hardcoded metrics shown as real destroy trust in every other number on screen.
 
-- [ ] **Regenerate or delete `VANNA_STACK.md`.** It marks Vitest, RTK, Reselect, Zustand,
-      AG Grid, Docker, CI/CD, Lighthouse CI, and the whole WebSocket section as not done.
-      All of it is shipped. Anyone who reads it concludes the doc is decoration.
+- [x] **Regenerate or delete `VANNA_STACK.md`.** Deleted. README now covers what is
+      built and why; ROADMAP covers what is next. A third overlapping doc is what let it
+      rot in the first place.
 
 - [ ] **Decide what session VWAP means in `ChartPanel`.** Left untouched deliberately —
       it changes numbers on screen, so it is your call, not a lint fix. Both series skip
@@ -177,10 +177,7 @@ Target: 2 to 3 days.
       anchor. (The O(n²) inner loop that recomputed the anchored sum per bar is already
       gone — it is a single O(n) pass now, same output.)
 
-- [ ] **Delete `src/components/Orb.tsx`.** Nothing imports it. `LandingPage` uses
-      `DisplacementOrb`, and `Header` imports `OrbIndicator` from `DisplacementOrb` too —
-      so the `OrbIndicator` in `Orb.tsx` is a second, unreachable copy. Confirm it is
-      genuinely superseded rather than mid-migration, then remove it.
+- [x] **Delete `src/components/Orb.tsx`.** Done — it was unreachable dead code.
 
 - [ ] **One Playwright path:** land, enter terminal, place order, see fill.
 
