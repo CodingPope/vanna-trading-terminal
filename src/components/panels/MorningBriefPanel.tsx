@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useMarket, useUI, MORNING_BRIEF_TEMPLATES } from '@/store';
+import { useUI, MORNING_BRIEF_TEMPLATES } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectFocusList, selectMarketRegime } from '@/store/selectors';
 import { 
   Sunrise, 
   BarChart3, 
@@ -11,7 +13,9 @@ import {
 } from 'lucide-react';
 
 export function MorningBriefPanel() {
-  const { state, setPhase } = useMarket();
+  const focusList = useAppSelector(selectFocusList);
+  const marketRegime = useAppSelector(selectMarketRegime);
+  const { setPhase } = useMarketActions();
   const { addNotification } = useUI();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -30,7 +34,7 @@ export function MorningBriefPanel() {
     addNotification({ type: 'info', message: `Template loaded: ${templateId}` });
   };
 
-  const todayFocus = state.focusList.slice(0, 5);
+  const todayFocus = focusList.slice(0, 5);
 
   return (
     <div className="h-full flex flex-col">
@@ -137,41 +141,41 @@ export function MorningBriefPanel() {
             <div className="glass-panel p-2">
               <span className="text-[9px] text-vanna-text-secondary uppercase">Trend</span>
               <p className={`font-mono text-sm ${
-                state.marketRegime.trend === 'bullish' ? 'text-vanna-green' :
-                state.marketRegime.trend === 'bearish' ? 'text-vanna-red' :
+                marketRegime.trend === 'bullish' ? 'text-vanna-green' :
+                marketRegime.trend === 'bearish' ? 'text-vanna-red' :
                 'text-vanna-gold'
               }`}>
-                {state.marketRegime.trend.toUpperCase()}
+                {marketRegime.trend.toUpperCase()}
               </p>
             </div>
             <div className="glass-panel p-2">
               <span className="text-[9px] text-vanna-text-secondary uppercase">Volatility</span>
               <p className={`font-mono text-sm ${
-                state.marketRegime.volatility === 'high' ? 'text-vanna-red' :
-                state.marketRegime.volatility === 'medium' ? 'text-vanna-gold' :
+                marketRegime.volatility === 'high' ? 'text-vanna-red' :
+                marketRegime.volatility === 'medium' ? 'text-vanna-gold' :
                 'text-vanna-green'
               }`}>
-                {state.marketRegime.volatility.toUpperCase()}
+                {marketRegime.volatility.toUpperCase()}
               </p>
             </div>
             <div className="glass-panel p-2">
               <span className="text-[9px] text-vanna-text-secondary uppercase">Breadth</span>
               <p className={`font-mono text-sm ${
-                state.marketRegime.breadth === 'strong' ? 'text-vanna-green' :
-                state.marketRegime.breadth === 'weak' ? 'text-vanna-red' :
+                marketRegime.breadth === 'strong' ? 'text-vanna-green' :
+                marketRegime.breadth === 'weak' ? 'text-vanna-red' :
                 'text-vanna-gold'
               }`}>
-                {state.marketRegime.breadth.toUpperCase()}
+                {marketRegime.breadth.toUpperCase()}
               </p>
             </div>
             <div className="glass-panel p-2">
               <span className="text-[9px] text-vanna-text-secondary uppercase">Sentiment</span>
               <p className={`font-mono text-sm ${
-                state.marketRegime.sentiment === 'greed' ? 'text-vanna-green' :
-                state.marketRegime.sentiment === 'fear' ? 'text-vanna-red' :
+                marketRegime.sentiment === 'greed' ? 'text-vanna-green' :
+                marketRegime.sentiment === 'fear' ? 'text-vanna-red' :
                 'text-vanna-gold'
               }`}>
-                {state.marketRegime.sentiment.toUpperCase()}
+                {marketRegime.sentiment.toUpperCase()}
               </p>
             </div>
           </div>

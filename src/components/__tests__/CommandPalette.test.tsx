@@ -50,17 +50,6 @@ vi.mock('@/store', async (importOriginal) => {
       addNotification: vi.fn(),
       setSearchQuery: vi.fn(),
     }),
-    useMarket: () => ({
-      state: {
-        selectedSymbol: 'AAPL',
-        marketData: new Map(),
-        focusList: [],
-        currentPhase: 'pre-market',
-        marketRegime: { trend: 'bullish', volatility: 'medium', breadth: 'strong', sentiment: 'neutral' },
-      },
-      setSelectedSymbol: vi.fn(),
-      setPhase: vi.fn(),
-    }),
   };
 });
 

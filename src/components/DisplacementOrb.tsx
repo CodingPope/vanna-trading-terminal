@@ -10,7 +10,8 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, AdaptiveDpr, Preload, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { useUI } from '@/store';
-import { useMarket } from '@/store/MarketStore';
+import { useAppSelector } from '@/store/hooks';
+import { selectMarketRegime } from '@/store/selectors';
 import { useOrbStore } from '@/store/orbStore';
 
 // ── Shaders (identical to original, ported as tagged-template constants) ─────
@@ -201,16 +202,15 @@ interface DisplacementOrbProps {
 
 export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbProps) {
   const { enterDashboard } = useUI();
-  const { state: marketState } = useMarket();
+  const marketRegime = useAppSelector(selectMarketRegime);
 
   const { volatility, trendStrength, breadth } = useMemo(() => {
-    const { marketRegime } = marketState;
     return {
       volatility: marketRegime.volatility === 'low' ? 0.2 : marketRegime.volatility === 'high' ? 0.95 : 0.5,
       trendStrength: marketRegime.trend === 'neutral' ? 0.3 : 0.8,
       breadth: marketRegime.breadth === 'strong' ? 0.85 : marketRegime.breadth === 'weak' ? 0.25 : 0.5,
     };
-  }, [marketState]);
+  }, [marketRegime]);
 
   return (
     <div
@@ -265,7 +265,7 @@ export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbP
 export function OrbIndicator({ size = 40 }: { size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
-  const { state: marketState } = useMarket();
+  const marketRegime = useAppSelector(selectMarketRegime);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -315,10 +315,9 @@ export function OrbIndicator({ size = 40 }: { size?: number }) {
 
   useEffect(() => {
     if (!materialRef.current) return;
-    const { marketRegime } = marketState;
     materialRef.current.uniforms.uVolatility.value =
       marketRegime.volatility === 'low' ? 0.2 : marketRegime.volatility === 'high' ? 0.95 : 0.5;
-  }, [marketState]);
+  }, [marketRegime]);
 
   return (
     <canvas

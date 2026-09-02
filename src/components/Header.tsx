@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMarket, TRADING_PHASES } from '@/store';
+import { TRADING_PHASES } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectCurrentPhase, selectMarketRegime } from '@/store/selectors';
 import { OrbIndicator } from './DisplacementOrb';
 import { 
   Search, 
@@ -11,14 +13,16 @@ import {
 } from 'lucide-react';
 
 export function Header() {
-  const { state: marketState, setPhase } = useMarket();
+  const currentPhaseId = useAppSelector(selectCurrentPhase);
+  const marketRegime = useAppSelector(selectMarketRegime);
+  const { setPhase } = useMarketActions();
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const phaseMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const currentPhase = TRADING_PHASES.find(p => p.id === marketState.currentPhase);
+  const currentPhase = TRADING_PHASES.find(p => p.id === currentPhaseId);
 
   // Close menus on outside click
   useEffect(() => {
@@ -83,9 +87,9 @@ export function Header() {
                     setShowPhaseMenu(false);
                   }}
                   className={`w-full px-3 py-2 text-left hover:bg-white/5 transition-colors
-                    ${marketState.currentPhase === phase.id ? 'bg-vanna-cyan/10' : ''}`}
+                    ${currentPhaseId === phase.id ? 'bg-vanna-cyan/10' : ''}`}
                   role="option"
-                  aria-selected={marketState.currentPhase === phase.id}
+                  aria-selected={currentPhaseId === phase.id}
                 >
                   <div className="flex items-center justify-between">
                     <span className="terminal-text text-xs text-vanna-text">{phase.name}</span>
@@ -137,11 +141,11 @@ export function Header() {
           <div className="flex flex-col">
             <span className="terminal-text text-[10px] text-vanna-text-secondary">REGIME</span>
             <span className={`terminal-text text-[10px] ${
-              marketState.marketRegime.trend === 'bullish' ? 'text-vanna-green' :
-              marketState.marketRegime.trend === 'bearish' ? 'text-vanna-red' :
+              marketRegime.trend === 'bullish' ? 'text-vanna-green' :
+              marketRegime.trend === 'bearish' ? 'text-vanna-red' :
               'text-vanna-gold'
             }`}>
-              {marketState.marketRegime.trend.toUpperCase()}
+              {marketRegime.trend.toUpperCase()}
             </span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { useMarket } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectMarketDataMap, selectSelectedSymbol } from '@/store/selectors';
 import type { MarketData } from '@/types';
 
 type SortMode = 'symbol' | 'change' | 'volume';
@@ -13,11 +14,13 @@ function formatCompactVolume(v: number): string {
 }
 
 export function TickerPanel() {
-  const { state, setSelectedSymbol } = useMarket();
+  const marketData = useAppSelector(selectMarketDataMap);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const { setSelectedSymbol } = useMarketActions();
   const [sortMode, setSortMode] = useState<SortMode>('change');
 
   const rows = useMemo(() => {
-    const items = Array.from(state.marketData.entries());
+    const items = Array.from(marketData.entries());
     if (sortMode === 'symbol') {
       items.sort((a, b) => a[0].localeCompare(b[0]));
     } else if (sortMode === 'change') {
@@ -26,7 +29,7 @@ export function TickerPanel() {
       items.sort((a, b) => b[1].volume - a[1].volume);
     }
     return items;
-  }, [sortMode, state.marketData]);
+  }, [sortMode, marketData]);
 
   const tape = rows.slice(0, 12);
 
@@ -55,7 +58,7 @@ export function TickerPanel() {
               key={`tape-${symbol}`}
               onClick={() => setSelectedSymbol(symbol)}
               className={`px-2 py-1 rounded border text-[10px] font-mono transition-colors
-                ${state.selectedSymbol === symbol ? 'border-vanna-cyan/60 bg-vanna-cyan/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
+                ${selectedSymbol === symbol ? 'border-vanna-cyan/60 bg-vanna-cyan/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
             >
               <span className="text-vanna-text">{symbol}</span>
               <span className={`ml-1 ${data.changePercent >= 0 ? 'text-vanna-green' : 'text-vanna-red'}`}>
@@ -79,7 +82,7 @@ export function TickerPanel() {
             key={symbol}
             symbol={symbol}
             data={data}
-            selected={state.selectedSymbol === symbol}
+            selected={selectedSymbol === symbol}
             onSelect={setSelectedSymbol}
           />
         ))}

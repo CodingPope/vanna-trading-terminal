@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useMarket } from '@/store';
 import { useKeyboard } from '@/hooks/useKeyboard';
-import { DEFAULT_PANELS } from '@/store/MarketStore';
+import { DEFAULT_PANELS } from '@/store/slices/panelsSlice';
+import { useAppSelector, useMarketActions, useWorkspaceActions } from '@/store/hooks';
+import { selectPanels, selectWorkspaces, selectCurrentWorkspaceId } from '@/store/selectors';
 import { Header } from '@/components/Header';
 import { StatsFooter } from '@/components/StatsFooter';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
@@ -176,7 +177,11 @@ function DraggablePanel({ panel, onUpdate, children, canDrag, canResize }: Dragg
 
 export function Dashboard() {
   useKeyboard();
-  const { state, updatePanels, saveWorkspace, loadWorkspace, deleteWorkspace } = useMarket();
+  const panels = useAppSelector(selectPanels);
+  const workspaces = useAppSelector(selectWorkspaces);
+  const currentWorkspaceId = useAppSelector(selectCurrentWorkspaceId);
+  const { updatePanels } = useMarketActions();
+  const { saveWorkspace, loadWorkspace, deleteWorkspace } = useWorkspaceActions();
   const [layoutMode, setLayoutMode] = useState<'grid' | 'free'>(() => {
     const stored = localStorage.getItem('vanna:layout-mode');
     return stored === 'grid' || stored === 'free' ? stored : 'free';
@@ -211,18 +216,18 @@ export function Dashboard() {
   };
 
   const handleDeleteWorkspace = () => {
-    if (!state.currentWorkspaceId) return;
+    if (!currentWorkspaceId) return;
     const confirmDelete = window.confirm('Delete this workspace?');
     if (!confirmDelete) return;
-    deleteWorkspace(state.currentWorkspaceId);
+    deleteWorkspace(currentWorkspaceId);
   };
 
   const handlePanelUpdate = useCallback((updatedPanel: Panel) => {
-    const newPanels = state.panels.map(p => 
+    const newPanels = panels.map(p => 
       p.id === updatedPanel.id ? updatedPanel : p
     );
     updatePanels(newPanels);
-  }, [state.panels, updatePanels]);
+  }, [panels, updatePanels]);
 
   // Grid layout positions
   const gridLayout = [
@@ -267,12 +272,12 @@ export function Dashboard() {
             Reset
           </button>
           <select
-            value={state.currentWorkspaceId || ''}
+            value={currentWorkspaceId || ''}
             onChange={(e) => handleLoadWorkspace(e.target.value)}
             className="ml-2 px-2 py-1 text-[10px] rounded bg-vanna-surface-light/40 border border-white/10 text-vanna-text"
           >
             <option value="" disabled>Select workspace</option>
-            {state.workspaces.map(ws => (
+            {workspaces.map(ws => (
               <option key={ws.id} value={ws.id}>{ws.name}</option>
             ))}
           </select>
@@ -292,7 +297,7 @@ export function Dashboard() {
 
         {/* Panels container */}
         <div className="absolute inset-0 p-4">
-          {state.panels.map((panel) => {
+          {panels.map((panel) => {
             const PanelComponent = PANEL_COMPONENTS[panel.type];
             if (!PanelComponent) return null;
 

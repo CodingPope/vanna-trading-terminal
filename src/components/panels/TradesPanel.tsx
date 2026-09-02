@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { useMarket } from '@/store';
+import { useAppSelector } from '@/store/hooks';
+import { selectSelectedSymbol, selectMarketData } from '@/store/selectors';
+import type { RootState } from '@/store/store';
 
 interface TradePrint {
   id: string;
@@ -27,9 +29,9 @@ function randomLot(): number {
 }
 
 export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
-  const { state, getMarketData } = useMarket();
-  const symbol = propSymbol ?? state.selectedSymbol;
-  const marketData = getMarketData(symbol);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const symbol = propSymbol ?? selectedSymbol;
+  const marketData = useAppSelector((s: RootState) => selectMarketData(s, symbol));
   const [trades, setTrades] = useState<TradePrint[]>([]);
   const prevPriceRef = useRef<number | null>(null);
   const prevSymbolRef = useRef<string | null>(null);

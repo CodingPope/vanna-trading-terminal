@@ -1,5 +1,7 @@
 import { useState, useEffect, useDeferredValue } from 'react';
-import { useMarket, useUI, TRADING_PHASES } from '@/store';
+import { useUI, TRADING_PHASES } from '@/store';
+import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { selectCurrentPhase, selectFocusList, selectSelectedSymbol } from '@/store/selectors';
 import {
   Star,
   TrendingUp,
@@ -15,7 +17,10 @@ interface FocusListPanelProps {
 }
 
 export function FocusListPanel({ compact = false }: FocusListPanelProps) {
-  const { state: marketState, setSelectedSymbol } = useMarket();
+  const currentPhaseId = useAppSelector(selectCurrentPhase);
+  const focusList = useAppSelector(selectFocusList);
+  const selectedSymbol = useAppSelector(selectSelectedSymbol);
+  const { setSelectedSymbol } = useMarketActions();
   const { state: uiState, addNotification } = useUI();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -24,11 +29,11 @@ export function FocusListPanel({ compact = false }: FocusListPanelProps) {
   // even when the focus list is large or re-renders are expensive.
   const deferredQuery = useDeferredValue(searchQuery);
 
-  const currentPhase = TRADING_PHASES.find(p => p.id === marketState.currentPhase);
+  const currentPhase = TRADING_PHASES.find(p => p.id === currentPhaseId);
   const maxItems = currentPhase?.maxFocusItems || 12;
 
   // Filter focus list: first by phase cap, then by deferred search query
-  const filteredFocusList = marketState.focusList
+  const filteredFocusList = focusList
     .slice(0, maxItems)
     .filter(item =>
       deferredQuery.length === 0 ||
@@ -173,7 +178,7 @@ export function FocusListPanel({ compact = false }: FocusListPanelProps) {
             className={`w-full grid gap-2 px-3 py-2 text-left transition-colors border-b border-white/5
               ${compact ? 'grid-cols-[1fr_auto_auto]' : 'grid-cols-[auto_1fr_auto_auto_auto]'}
               ${selectedIndex === index ? 'bg-vanna-cyan/10' : 'hover:bg-white/5'}
-              ${marketState.selectedSymbol === item.symbol ? 'border-l-2 border-l-vanna-cyan' : ''}`}
+              ${selectedSymbol === item.symbol ? 'border-l-2 border-l-vanna-cyan' : ''}`}
             aria-selected={selectedIndex === index}
             role="option"
           >
