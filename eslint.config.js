@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // shadcn/ui primitives co-export cva variant maps alongside their components,
+    // and the store files co-export providers with their hooks. Neither shape is
+    // compatible with fast-refresh's one-component-per-file rule.
+    files: ['src/components/ui/**', 'src/store/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

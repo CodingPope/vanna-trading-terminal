@@ -35,7 +35,7 @@ function loadInitialPanels(): Panel[] {
       const parsed = JSON.parse(stored) as Panel[];
       if (Array.isArray(parsed) && parsed.length) return mergeWithDefaultPanels(parsed);
     }
-  } catch (_) { /* ignore */ }
+  } catch { /* ignore */ }
   return DEFAULT_PANELS.map(p => ({ ...p }));
 }
 
@@ -51,7 +51,7 @@ function loadInitialWorkspaces(): { workspaces: Workspace[]; currentWorkspaceId:
         };
       }
     }
-  } catch (_) { /* ignore */ }
+  } catch { /* ignore */ }
   const defaultWs: Workspace = {
     id: 'ws_default', name: 'Default',
     panels: DEFAULT_PANELS.map(p => ({ ...p })),
@@ -78,7 +78,7 @@ const initialState: PanelsSliceState = {
 function persistWorkspacesToStorage(workspaces: Workspace[], currentId: string | null) {
   try {
     localStorage.setItem(WORKSPACES_STORAGE_KEY, JSON.stringify({ workspaces, currentId }));
-  } catch (_) { /* ignore */ }
+  } catch { /* ignore */ }
 }
 
 export const panelsSlice = createSlice({
@@ -87,7 +87,7 @@ export const panelsSlice = createSlice({
   reducers: {
     updatePanels(state, action: PayloadAction<Panel[]>) {
       state.panels = action.payload;
-      try { localStorage.setItem(PANELS_STORAGE_KEY, JSON.stringify(action.payload)); } catch (_) { /* ignore */ }
+      try { localStorage.setItem(PANELS_STORAGE_KEY, JSON.stringify(action.payload)); } catch { /* ignore */ }
     },
     setWorkspaces(state, action: PayloadAction<{ workspaces: Workspace[]; currentWorkspaceId?: string | null }>) {
       state.workspaces = action.payload.workspaces;

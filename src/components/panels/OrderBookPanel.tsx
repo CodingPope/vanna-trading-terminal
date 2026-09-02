@@ -1,7 +1,7 @@
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
-import { memo, useMemo, useCallback, useRef } from 'react';
+import { memo, useMemo, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import { useSelector } from 'react-redux';
@@ -103,8 +103,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
   }, [bids, asks]);
 
   // Passed as context to cell renderers
-  const gridContext = useRef({ maxSize });
-  gridContext.current.maxSize = maxSize;
+  const gridContext = useMemo(() => ({ maxSize }), [maxSize]);
 
   const getRowId = useCallback((params: { data: OrderBookEntry }) =>
     `${params.data.side}-${params.data.price}`, []);
@@ -145,7 +144,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           getRowId={getRowId}
           rowHeight={20}
           headerHeight={24}
-          context={gridContext.current}
+          context={gridContext}
           animateRows={false}
           suppressCellFocus
           suppressMovableColumns
@@ -169,7 +168,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           getRowId={getRowId}
           rowHeight={20}
           headerHeight={0}
-          context={gridContext.current}
+          context={gridContext}
           animateRows={false}
           suppressCellFocus
           suppressMovableColumns
