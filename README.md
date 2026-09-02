@@ -1,5 +1,7 @@
 # VANNA Trading Terminal
 
+[![CI](https://github.com/CodingPope/vanna-trading-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/CodingPope/vanna-trading-terminal/actions/workflows/ci.yml)
+
 A multi-panel trading terminal built in React and TypeScript — order book, depth, tape,
 candles, positions and watchlist in a draggable, resizable workspace that persists.
 
