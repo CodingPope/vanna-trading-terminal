@@ -249,8 +249,11 @@ export function Dashboard() {
       
       {/* Main content area */}
       <main className="flex-1 relative overflow-hidden">
-        {/* Layout toggle */}
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+        {/* Workspace controls. Sits in its own band rather than floating over
+            the canvas: the panel container below is inset-0, so anything
+            positioned near the top right (the order book, at x:860 y:0) was
+            rendering underneath these buttons. */}
+        <div className="absolute top-0 left-0 right-0 h-10 z-20 flex items-center justify-end gap-1 px-2 bg-vanna-surface/80 backdrop-blur-sm border-b border-white/5">
           <button
             onClick={() => setLayoutMode('grid')}
             className={`px-2 py-1 text-[10px] rounded transition-colors
@@ -295,8 +298,8 @@ export function Dashboard() {
           </button>
         </div>
 
-        {/* Panels container */}
-        <div className="absolute inset-0 p-4">
+        {/* Panels container — starts below the workspace controls band. */}
+        <div className="absolute inset-x-0 bottom-0 top-10 p-4 overflow-auto">
           {panels.map((panel) => {
             const PanelComponent = PANEL_COMPONENTS[panel.type];
             if (!PanelComponent) return null;

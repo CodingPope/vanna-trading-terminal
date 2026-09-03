@@ -18,6 +18,7 @@ import type { Store } from '@reduxjs/toolkit';
 import {
   batchUpdateMarketData,
   setConnected as rtkSetConnected,
+  setFeedSource,
 } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
 import { setFocusList } from './slices/positionsSlice';
@@ -118,10 +119,14 @@ function useFeedSource(dispatch: AppDispatch): FeedSource {
           return;
         }
         handle = result;
-        setSource(result ? 'live' : 'simulated');
+        const next = result ? 'live' : 'simulated';
+        setSource(next);
+        dispatch(setFeedSource(next));
       })
       .catch(() => {
-        if (!cancelled) setSource('simulated');
+        if (cancelled) return;
+        setSource('simulated');
+        dispatch(setFeedSource('simulated'));
       });
 
     return () => {

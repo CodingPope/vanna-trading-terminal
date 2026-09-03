@@ -142,10 +142,16 @@ export const generateMockAnaAnalysis = (symbol: string): AnaAnalysis => {
   const regimes: AnaAnalysis['regimeFit'][] = ['strong', 'moderate', 'weak'];
   const verdicts: AnaAnalysis['verdict'][] = ['VALID', 'NO_TRADE', 'STANDBY'];
 
-  const basePrice = 100 + Math.random() * 100;
-  const triggerPrice = basePrice + (Math.random() - 0.5) * 10;
-  const invalidation = triggerPrice - (Math.random() * 5 + 2);
-  const target = triggerPrice + (Math.random() * 15 + 5);
+  // Levels have to be anchored to the symbol's own price and scaled to its
+  // volatility. Anchoring on `100 + Math.random() * 100` produced a $141
+  // trigger for a stock quoted at $232 — a setup nobody could act on, sitting
+  // next to a chart showing the real level.
+  const { price: basePrice, volatility } = getSymbolSeed(symbol);
+  const band = basePrice * 0.01 * volatility;
+
+  const triggerPrice = basePrice + (Math.random() - 0.5) * band;
+  const invalidation = triggerPrice - (Math.random() * band + band * 0.4);
+  const target = triggerPrice + (Math.random() * band * 3 + band);
 
   return {
     symbol,

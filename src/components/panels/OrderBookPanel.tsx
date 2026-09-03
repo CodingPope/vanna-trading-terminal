@@ -3,7 +3,14 @@ import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 import { memo, useMemo, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
+import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
+
+// AG Grid v33+ ships nothing by default — without registering modules the grid
+// mounts, logs an error, and renders an empty shell with no rows. Registration
+// lives here rather than at app entry so the panel is self-contained and its
+// tests get a working grid too.
+ModuleRegistry.registerModules([AllCommunityModule]);
 import { useSelector } from 'react-redux';
 import { Settings, ArrowUp, ArrowDown } from 'lucide-react';
 import { selectOrderBook, selectMarketData, selectSelectedSymbol } from '@/store/selectors';
@@ -144,6 +151,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           getRowId={getRowId}
           rowHeight={20}
           headerHeight={24}
+          theme="legacy"
           context={gridContext}
           animateRows={false}
           suppressCellFocus
@@ -168,6 +176,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           getRowId={getRowId}
           rowHeight={20}
           headerHeight={0}
+          theme="legacy"
           context={gridContext}
           animateRows={false}
           suppressCellFocus
