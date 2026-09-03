@@ -31,16 +31,19 @@ backend exists, or the app is dead. The goal is making it **swappable**.
 2. ~~Migrate the `useMarket` consumers onto selectors; shrink `MarketStore` to feed-only.~~
    **done** — it was 15 call sites, not 9. `MarketStore.tsx` is gone, split into
    `store/hooks.ts`, `store/marketFeed.tsx` (the feed seam) and `store/constants.ts`.
-3. Consolidate UI state (`UIContext` → Zustand, 20 files). Order entry lands on whichever wins.
-4. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
+3. ~~Replace the fabricated stats.~~ **done** — moved up from Tier 3. It does *not*
+   resolve itself with the backend: fps and frame time are client-side metrics no server
+   can supply, and `websocket.ts` would have replaced random-fake with constant-fake.
+4. Consolidate UI state (`UIContext` → Zustand, 20 files). Order entry lands on whichever wins.
+5. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
 
 **Phase B — backend**
 
-5. FastAPI backend + `GET /api/snapshot` + WS, two-service compose
-6. Swap the feed. The fabricated stats in `MarketStore` die here for free.
-7. Chaos toggle (gaps, disconnects, burst)
-8. Order entry + blotter
-9. Playwright happy path
+6. FastAPI backend + `GET /api/snapshot` + WS, two-service compose
+7. Swap the feed. `wsLatency` becomes a real measurement here.
+8. Chaos toggle (gaps, disconnects, burst)
+9. Order entry + blotter
+10. Playwright happy path
 
 **Deferred by choice:** deploy, screenshot, demo link. Not until the project is close to
 done — the work so far is not visual, so there is nothing worth showing yet.
@@ -160,10 +163,15 @@ Target: 2 to 3 days.
       longer re-renders on ticks. Swapping the mock feed for the real transport is now a
       change to one function body in `store/marketFeed.tsx`.
 
-- [ ] **Replace the fabricated stats.** `websocket.ts` dispatches a hardcoded
-      `fps: 60, renderTime: 0` on every pong, and the UI displays it as measured.
-      Wire to a real rAF counter and `PerformanceObserver`, or delete the fields.
-      Hardcoded metrics shown as real destroy trust in every other number on screen.
+- [x] **Replace the fabricated stats.** Done. `usePerformanceStats` measures fps and
+      peak frame time from a real rAF counter; `setStats` merges a Partial so each
+      producer reports only what it can measure; unmeasurable values render as "—".
+      Five tests assert the numbers track actual frame timing.
+
+- [ ] **Two fabrications remain in `StatsFooter`.** "MARKET OPEN / 09:30 - 16:00 ET" is a
+      hardcoded string that says the same thing at 3am — derive it from the clock or drop
+      it. And `isConnected` is set true by the mock feed, so the footer reads LIVE next to
+      a Wifi icon with no socket behind it; resolve when the real feed lands.
 
 - [x] **Regenerate or delete `VANNA_STACK.md`.** Deleted. README now covers what is
       built and why; ROADMAP covers what is next. A third overlapping doc is what let it
