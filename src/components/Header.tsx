@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { TRADING_PHASES } from '@/store';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
+import { useUIStore } from '@/store/uiStore';
 import { selectCurrentPhase, selectMarketRegime } from '@/store/selectors';
 import { OrbIndicator } from './DisplacementOrb';
 import { 
@@ -16,6 +17,9 @@ export function Header() {
   const currentPhaseId = useAppSelector(selectCurrentPhase);
   const marketRegime = useAppSelector(selectMarketRegime);
   const { setPhase } = useMarketActions();
+  const toggleSettings = useUIStore(s => s.toggleSettings);
+  const addNotification = useUIStore(s => s.addNotification);
+  const notificationCount = useUIStore(s => s.notifications.length);
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchValue, setSearchValue] = useState('');
@@ -152,17 +156,27 @@ export function Header() {
 
         {/* Notifications */}
         <button
-          onClick={() => {}}
+          onClick={() =>
+            addNotification({
+              type: 'info',
+              message: notificationCount
+                ? `${notificationCount} active alert${notificationCount > 1 ? 's' : ''}`
+                : 'No new alerts',
+            })
+          }
           className="relative p-2 rounded-md hover:bg-white/5 transition-colors"
           aria-label="Notifications"
         >
           <Bell className="w-4 h-4 text-vanna-text-secondary" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-vanna-red rounded-full" />
+          {/* Was always on, so it permanently implied unread items. */}
+          {notificationCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 bg-vanna-red rounded-full" />
+          )}
         </button>
 
         {/* Settings */}
         <button
-          onClick={() => {}}
+          onClick={toggleSettings}
           className="p-2 rounded-md hover:bg-white/5 transition-colors"
           aria-label="Settings"
         >

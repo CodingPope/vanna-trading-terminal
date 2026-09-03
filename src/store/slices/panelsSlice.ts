@@ -15,6 +15,7 @@ export const DEFAULT_PANELS: Panel[] = [
   { id: 'orderbook', type: 'orderbook', title: 'ORDER BOOK', x: 860, y: 0, width: 260, height: 430, minimized: false, maximized: false },
   { id: 'depth', type: 'depth', title: 'DEPTH', x: 860, y: 440, width: 260, height: 200, minimized: false, maximized: false },
   { id: 'positions', type: 'positions', title: 'POSITIONS', x: 860, y: 650, width: 260, height: 200, minimized: false, maximized: false },
+  { id: 'morning-brief', type: 'morning-brief', title: 'MORNING BRIEF', x: 1130, y: 0, width: 280, height: 430, minimized: false, maximized: false },
 ];
 
 function mergeWithDefaultPanels(storedPanels: Panel[]): Panel[] {
