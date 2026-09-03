@@ -20,7 +20,7 @@
  *   d       Dismiss
  */
 import { useHotkeys } from 'react-hotkeys-hook';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { selectCurrentPhase } from '@/store/selectors';
 import type { TradingPhase } from '@/types';
@@ -28,7 +28,9 @@ import type { TradingPhase } from '@/types';
 const PHASES: TradingPhase['id'][] = ['pre-market', 'open', 'midday', 'power-hour'];
 
 export function useKeyboard(): void {
-  const { toggleCommandPalette, toggleKeyboardShortcuts } = useUI();
+  const toggleCommandPalette = useUIStore(s => s.toggleCommandPalette);
+  const toggleKeyboardShortcuts = useUIStore(s => s.toggleKeyboardShortcuts);
+  const closeAllModals = useUIStore(s => s.closeAllModals);
   const currentPhase = useAppSelector(selectCurrentPhase);
   const { setPhase } = useMarketActions();
 
@@ -68,4 +70,9 @@ export function useKeyboard(): void {
 
   // Cmd/Ctrl+K — command palette
   useHotkeys('mod+k', (e) => { e.preventDefault(); toggleCommandPalette(); }, { preventDefault: true });
+
+  // Esc — close any open modal. Previously handled by a second window listener
+  // inside UIProvider, which also double-bound ? and mod+k against the hotkeys
+  // below, cancelling both toggles out.
+  useHotkeys('escape', () => closeAllModals(), { enableOnFormTags: true });
 }

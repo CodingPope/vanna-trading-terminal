@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { selectMarketDataMap } from '@/store/selectors';
 import { Search, TrendingUp, Bell, Settings, User } from 'lucide-react';
@@ -14,7 +14,9 @@ interface CommandItem {
 }
 
 export function CommandPalette() {
-  const { state: uiState, toggleCommandPalette, setView } = useUI();
+  const showCommandPalette = useUIStore(s => s.showCommandPalette);
+  const toggleCommandPalette = useUIStore(s => s.toggleCommandPalette);
+  const setView = useUIStore(s => s.setView);
   const marketData = useAppSelector(selectMarketDataMap);
   const { setSelectedSymbol, setPhase } = useMarketActions();
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,10 +24,10 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset local state when the palette transitions to closed.
-  const [wasOpen, setWasOpen] = useState(uiState.showCommandPalette);
-  if (uiState.showCommandPalette !== wasOpen) {
-    setWasOpen(uiState.showCommandPalette);
-    if (!uiState.showCommandPalette) {
+  const [wasOpen, setWasOpen] = useState(showCommandPalette);
+  if (showCommandPalette !== wasOpen) {
+    setWasOpen(showCommandPalette);
+    if (!showCommandPalette) {
       setSearchQuery('');
       setSelectedIndex(0);
     }
@@ -33,10 +35,10 @@ export function CommandPalette() {
 
   // Focus input when opened
   useEffect(() => {
-    if (uiState.showCommandPalette) {
+    if (showCommandPalette) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [uiState.showCommandPalette]);
+  }, [showCommandPalette]);
 
   const commands: CommandItem[] = [
     // Navigation
@@ -181,7 +183,7 @@ export function CommandPalette() {
     }
   };
 
-  if (!uiState.showCommandPalette) return null;
+  if (!showCommandPalette) return null;
 
   return (
     <div 

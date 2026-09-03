@@ -1,5 +1,6 @@
 import { useState, useEffect, useDeferredValue } from 'react';
-import { useUI, TRADING_PHASES } from '@/store';
+import { TRADING_PHASES } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { selectCurrentPhase, selectFocusList, selectSelectedSymbol } from '@/store/selectors';
 import {
@@ -21,7 +22,9 @@ export function FocusListPanel({ compact = false }: FocusListPanelProps) {
   const focusList = useAppSelector(selectFocusList);
   const selectedSymbol = useAppSelector(selectSelectedSymbol);
   const { setSelectedSymbol } = useMarketActions();
-  const { state: uiState, addNotification } = useUI();
+  const showCommandPalette = useUIStore(s => s.showCommandPalette);
+  const showKeyboardShortcuts = useUIStore(s => s.showKeyboardShortcuts);
+  const addNotification = useUIStore(s => s.addNotification);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,7 +47,7 @@ export function FocusListPanel({ compact = false }: FocusListPanelProps) {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (uiState.showCommandPalette || uiState.showKeyboardShortcuts) return;
+      if (showCommandPalette || showKeyboardShortcuts) return;
       
       switch (e.key.toLowerCase()) {
         case 'j':
@@ -80,7 +83,7 @@ export function FocusListPanel({ compact = false }: FocusListPanelProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredFocusList, selectedIndex, setSelectedSymbol, uiState.showCommandPalette, uiState.showKeyboardShortcuts, addNotification]);
+  }, [filteredFocusList, selectedIndex, setSelectedSymbol, showCommandPalette, showKeyboardShortcuts, addNotification]);
 
   const getQualityColor = (quality: number) => {
     if (quality >= 85) return 'text-vanna-green';

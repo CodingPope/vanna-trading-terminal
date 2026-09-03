@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -6,6 +6,7 @@ import marketReducer from '@/store/slices/marketSlice';
 import orderBookReducer from '@/store/slices/orderBookSlice';
 import positionsReducer from '@/store/slices/positionsSlice';
 import panelsReducer from '@/store/slices/panelsSlice';
+import { useUIStore } from '@/store/uiStore';
 import { CommandPalette } from '../CommandPalette';
 
 // ── Minimal store + provider ──────────────────────────────────────────────────
@@ -20,37 +21,10 @@ function makeStore() {
   });
 }
 
-// UIProvider is Context-based — mock it so CommandPalette can consume useUI()
-vi.mock('@/store', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/store')>();
-  return {
-    ...actual,
-    useUI: () => ({
-      state: {
-        showCommandPalette: true,
-        showKeyboardShortcuts: false,
-        showSettings: false,
-        currentView: 'dashboard',
-        sidebarCollapsed: false,
-        searchQuery: '',
-        searchResults: [],
-        notifications: [],
-        isLoading: false,
-        loadingMessage: '',
-        settings: {
-          highContrastMode: false,
-          soundEnabled: true,
-          notificationsEnabled: true,
-          defaultTimeframe: '5m',
-          riskPerTrade: 1,
-        },
-      },
-      toggleCommandPalette: vi.fn(),
-      setView: vi.fn(),
-      addNotification: vi.fn(),
-      setSearchQuery: vi.fn(),
-    }),
-  };
+// UI state is a plain Zustand store, so the real thing can be driven directly
+// rather than mocked — these tests now exercise the actual wiring.
+beforeEach(() => {
+  useUIStore.setState({ showCommandPalette: true });
 });
 
 function renderPalette() {

@@ -9,7 +9,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, AdaptiveDpr, Preload, Stats } from '@react-three/drei';
 import * as THREE from 'three';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { useAppSelector } from '@/store/hooks';
 import { selectMarketRegime } from '@/store/selectors';
 import { useOrbStore } from '@/store/orbStore';
@@ -201,7 +201,7 @@ interface DisplacementOrbProps {
 }
 
 export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbProps) {
-  const { enterDashboard } = useUI();
+  const enterDashboard = useUIStore(s => s.enterDashboard);
   const marketRegime = useAppSelector(selectMarketRegime);
 
   const { volatility, trendStrength, breadth } = useMemo(() => {

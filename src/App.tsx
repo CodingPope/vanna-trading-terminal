@@ -1,15 +1,15 @@
 import { StoreProvider } from '@/store';
 import { LandingPage } from '@/pages/LandingPage';
 import { Dashboard } from '@/pages/Dashboard';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 
 function AppContent() {
-  const { state } = useUI();
+  const currentView = useUIStore(s => s.currentView);
 
   return (
     <>
-      {state.currentView === 'landing' && <LandingPage />}
-      {state.currentView === 'dashboard' && <Dashboard />}
+      {currentView === 'landing' && <LandingPage />}
+      {currentView === 'dashboard' && <Dashboard />}
     </>
   );
 }

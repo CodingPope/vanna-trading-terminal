@@ -1,10 +1,11 @@
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { X, Keyboard } from 'lucide-react';
 
 export function KeyboardShortcuts() {
-  const { state, toggleKeyboardShortcuts } = useUI();
+  const showKeyboardShortcuts = useUIStore(s => s.showKeyboardShortcuts);
+  const toggleKeyboardShortcuts = useUIStore(s => s.toggleKeyboardShortcuts);
 
-  if (!state.showKeyboardShortcuts) return null;
+  if (!showKeyboardShortcuts) return null;
 
   const navigationShortcuts = [
     { key: 'J', description: 'Navigate focus list down' },
