@@ -8,3 +8,8 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
+
+# Python server
+server/.venv/
+__pycache__/
+*.pyc
