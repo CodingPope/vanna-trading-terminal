@@ -1,21 +1,22 @@
 import { useEffect } from 'react';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 export function Notifications() {
-  const { state, removeNotification } = useUI();
+  const notifications = useUIStore(s => s.notifications);
+  const removeNotification = useUIStore(s => s.removeNotification);
 
   // Auto-dismiss notifications after 5 seconds
   useEffect(() => {
-    state.notifications.forEach(notification => {
+    notifications.forEach(notification => {
       const timeout = setTimeout(() => {
         removeNotification(notification.id);
       }, 5000);
       return () => clearTimeout(timeout);
     });
-  }, [state.notifications, removeNotification]);
+  }, [notifications, removeNotification]);
 
-  if (state.notifications.length === 0) return null;
+  if (notifications.length === 0) return null;
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -32,7 +33,7 @@ export function Notifications() {
 
   return (
     <div className="fixed top-16 right-4 z-[90] space-y-2">
-      {state.notifications.map((notification) => (
+      {notifications.map((notification) => (
         <div
           key={notification.id}
           className="glass-panel flex items-start gap-3 px-4 py-3 min-w-[300px] max-w-[400px] animate-in slide-in-from-right duration-200"

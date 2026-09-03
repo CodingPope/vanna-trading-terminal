@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { DisplacementOrb } from '@/components/DisplacementOrb';
-import { useUI } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { Sparkles } from 'lucide-react';
 
 export function LandingPage() {
-  const { state, enterDashboard } = useUI();
+  const isLoading = useUIStore(s => s.isLoading);
+  const loadingMessage = useUIStore(s => s.loadingMessage);
+  const enterDashboard = useUIStore(s => s.enterDashboard);
   const [particles] = useState(() =>
     Array.from({ length: 24 }, () => ({
       left: Math.random() * 100,
@@ -83,13 +85,13 @@ export function LandingPage() {
       </div>
 
       {/* Loading overlay */}
-      {state.isLoading && (
+      {isLoading && (
         <div className="absolute inset-0 bg-vanna-bg/90 backdrop-blur-xl z-50 flex flex-col items-center justify-center">
           <div className="relative">
             <div className="w-16 h-16 rounded-full border-2 border-vanna-gold/20 border-t-vanna-gold animate-spin" />
           </div>
           <p className="mt-6 terminal-text text-vanna-text-secondary animate-pulse">
-            {state.loadingMessage}
+            {loadingMessage}
           </p>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useUI, MORNING_BRIEF_TEMPLATES } from '@/store';
+import { MORNING_BRIEF_TEMPLATES } from '@/store';
+import { useUIStore } from '@/store/uiStore';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { selectFocusList, selectMarketRegime } from '@/store/selectors';
 import { 
@@ -16,7 +17,7 @@ export function MorningBriefPanel() {
   const focusList = useAppSelector(selectFocusList);
   const marketRegime = useAppSelector(selectMarketRegime);
   const { setPhase } = useMarketActions();
-  const { addNotification } = useUI();
+  const addNotification = useUIStore(s => s.addNotification);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
