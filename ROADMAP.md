@@ -37,7 +37,9 @@ backend exists, or the app is dead. The goal is making it **swappable**.
 4. ~~Consolidate UI state (`UIContext` → Zustand).~~ **done** — 9 consumers, not 20, and
    `uiStore.ts` had *zero*. Deleting `UIProvider` also fixed `?` and Cmd+K, which were
    double-bound against `useKeyboard` and cancelling themselves out on the dashboard.
-5. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
+5. ~~WebSocket client tests (backoff, gap → re-snapshot, backpressure).~~ **done** — 17
+   tests, mutation-checked. Backpressure turned out to be unreachable and was rewired to
+   drain on a frame; see below.
 
 **Phase B — backend**
 
@@ -130,6 +132,9 @@ Target: 1 to 2 weeks. These are the only two items that change a hiring decision
 - [ ] **Add a chaos toggle to the backend.** Inject sequence gaps, force disconnects,
       burst the message rate. This is the demo. Watching the client detect a gap and
       re-snapshot live is what turns a portfolio piece into an offer.
+      Burst mode now has something to show: `client.droppedMessages` counts shed
+      low-priority messages, and the queue sheds above roughly 15k msg/sec. Surface that
+      counter in the stats footer when the chaos toggle lands.
 
 - [ ] **Ship order entry and a blotter.** Zero matches today for `OrderEntry`,
       `placeOrder`, `submitOrder`, `blotter`. All twelve panels are read-only.
@@ -143,11 +148,14 @@ Target: 1 to 2 weeks. These are the only two items that change a hiring decision
       Why: high-consequence transactional UX is what front-office teams screen hardest
       for, and it is the one gap on the skills list this project does not touch at all.
 
-- [ ] **Test the WebSocket client.** `services/websocket.ts` is the most interesting
-      code in the repo and the only untested code. Use `mock-socket` or fake timers.
-  - [ ] Backoff sequence: 1s, 2s, 4s, capped at 30s
-  - [ ] Sequence gap triggers `subscribe` with `requestSnapshot: true`
-  - [ ] Backpressure queue drops low-priority messages under load
+- [x] **Test the WebSocket client.** Done — 17 tests using a hand-rolled socket double
+      rather than mock-socket, whose internal setTimeout delivery fights the fake timers
+      the backoff tests need.
+  - [x] Backoff sequence: 1s, 2s, 4s, capped at 30s, reset after a successful open
+  - [x] Sequence gap triggers `subscribe` with `requestSnapshot: true`
+  - [x] Backpressure queue drops low-priority messages under load — this required
+        *fixing* it first. It was drained synchronously on every message, so it never
+        held more than one item and could not shed at all.
 
 ---
 
