@@ -30,7 +30,18 @@ interface WebSocketClientOptions {
   onMessage?: (msg: WsMessage) => void;
   maxRetries?: number;
   heartbeatIntervalMs?: number;
+  queueCapacity?: number;
 }
+
+/**
+ * Messages the queue will hold before shedding low-priority ones.
+ *
+ * The queue drains every animation frame, so this is really "one frame's
+ * worth": at ~16ms a frame, 250 messages is roughly a 15k/sec feed. Above
+ * that the client is not keeping up and stale market data is the right thing
+ * to throw away. Order book and position updates are never dropped.
+ */
+const DEFAULT_QUEUE_CAPACITY = 250;
 
 /**
  * Production-grade WebSocket client:
@@ -51,6 +62,7 @@ export class WebSocketClient {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
   private latencyStart = 0;
+  private drainHandle: number | null = null;
 
   private readonly marketDataHandler: MarketDataHandler;
   private readonly orderBookHandler: OrderBookHandler;
@@ -65,7 +77,15 @@ export class WebSocketClient {
     this.onMessage = options.onMessage;
     this.marketDataHandler = new MarketDataHandler(this.dispatch);
     this.orderBookHandler = new OrderBookHandler(this.dispatch);
-    this.messageQueue = new BackpressureQueue<WsMessage>(1000);
+    this.messageQueue = new BackpressureQueue<WsMessage>(options.queueCapacity ?? DEFAULT_QUEUE_CAPACITY);
+  }
+
+  /**
+   * Messages discarded because the client could not keep up. Only ever
+   * low-priority ones — see BackpressureQueue.
+   */
+  get droppedMessages(): number {
+    return this.messageQueue.dropped;
   }
 
   connect(): void {
@@ -107,7 +127,27 @@ export class WebSocketClient {
     };
   }
 
+  /**
+   * Queue on arrival, process on the next frame.
+   *
+   * Draining synchronously inside onmessage would mean the queue never holds
+   * more than one item, which makes its capacity — and therefore the whole
+   * point of it — unreachable. Deferring to a frame lets a burst actually
+   * accumulate, so the queue can shed load when the client cannot keep up.
+   *
+   * Priority decides what gets evicted, never what gets processed first:
+   * draining stays FIFO because order book deltas are cumulative and must be
+   * applied in the order they were sent.
+   */
   private enqueueAndProcess(msg: WsMessage): void {
+    // Control messages skip the queue. A pong measures network round-trip, so
+    // making it wait for a drain would fold our own backlog into the reported
+    // latency — worst exactly when the queue is deep and the number matters.
+    if (msg.type === 'pong' || msg.type === 'error') {
+      this.handleMessage(msg);
+      return;
+    }
+
     const priority =
       msg.type === 'order_book_snapshot' ||
       msg.type === 'order_book_delta' ||
@@ -116,11 +156,21 @@ export class WebSocketClient {
         : 'low';
 
     this.messageQueue.enqueue(msg, priority);
+    this.scheduleDrain();
+  }
 
-    while (!this.messageQueue.isEmpty) {
-      const queued = this.messageQueue.dequeue();
-      if (queued) this.handleMessage(queued.data);
-    }
+  private scheduleDrain(): void {
+    if (this.drainHandle !== null || this.destroyed) return;
+    this.drainHandle = requestAnimationFrame(() => {
+      this.drainHandle = null;
+      while (!this.messageQueue.isEmpty) {
+        const queued = this.messageQueue.dequeue();
+        if (queued) this.handleMessage(queued.data);
+      }
+      // Already inside a frame — push the deduped batch out now rather than
+      // waiting for the handler's own frame.
+      this.marketDataHandler.flush();
+    });
   }
 
   private handleMessage(msg: WsMessage): void {
@@ -196,6 +246,7 @@ export class WebSocketClient {
     this.destroyed = true;
     this.stopHeartbeat();
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
+    if (this.drainHandle !== null) { cancelAnimationFrame(this.drainHandle); this.drainHandle = null; }
     this.marketDataHandler.destroy();
     this.ws?.close();
     this.ws = null;
