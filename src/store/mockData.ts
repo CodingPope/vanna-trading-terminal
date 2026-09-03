@@ -5,38 +5,108 @@ export const SYMBOLS = [
   'UBER', 'COIN', 'PLTR', 'ARKK', 'SPY', 'QQQ', 'IWM', 'VIX', 'GLD', 'TLT',
 ];
 
+interface SymbolSeed {
+  /** Rough price anchor, so a ticker at least lands in its own postcode. */
+  price: number;
+  /** Movement multiplier, 1.0 being a typical large-cap. */
+  volatility: number;
+}
+
+/**
+ * Starting points for the simulated feed.
+ *
+ * These are approximate anchors, NOT quotes — they are hardcoded, they do not
+ * update, and they drift further from reality every day this file is not
+ * touched. They exist so the terminal does not price AAPL at $73 next to a
+ * $180 VIX, which the previous `Math.random() * 200 + 50` did regardless of
+ * symbol.
+ *
+ * The replay fixture supersedes all of this once the backend lands; this is
+ * the fallback for when no session is loaded.
+ */
+const SYMBOL_SEEDS: Record<string, SymbolSeed> = {
+  AAPL: { price: 232, volatility: 0.8 },
+  MSFT: { price: 438, volatility: 0.7 },
+  GOOGL: { price: 178, volatility: 0.9 },
+  AMZN: { price: 205, volatility: 0.9 },
+  TSLA: { price: 342, volatility: 2.2 },
+  NVDA: { price: 141, volatility: 1.8 },
+  META: { price: 604, volatility: 1.1 },
+  NFLX: { price: 890, volatility: 1.2 },
+  AMD: { price: 152, volatility: 1.6 },
+  CRM: { price: 276, volatility: 1.0 },
+  UBER: { price: 74, volatility: 1.2 },
+  COIN: { price: 248, volatility: 2.6 },
+  PLTR: { price: 82, volatility: 2.4 },
+  ARKK: { price: 63, volatility: 1.7 },
+  SPY: { price: 598, volatility: 0.4 },
+  QQQ: { price: 522, volatility: 0.5 },
+  IWM: { price: 228, volatility: 0.7 },
+  VIX: { price: 15.4, volatility: 3.0 },
+  GLD: { price: 251, volatility: 0.4 },
+  TLT: { price: 89, volatility: 0.5 },
+};
+
+const FALLBACK_SEED: SymbolSeed = { price: 100, volatility: 1.0 };
+
+export const getSymbolSeed = (symbol: string): SymbolSeed =>
+  SYMBOL_SEEDS[symbol] ?? FALLBACK_SEED;
+
+/**
+ * Per-tick movement as a fraction of price.
+ *
+ * Proportional rather than absolute: the old feed moved every symbol by up to
+ * ±$0.25 a tick, which is a rounding error on a $600 SPY and a 1.6% lurch on
+ * a $15 VIX.
+ */
+export const tickMagnitude = (symbol: string): number =>
+  getSymbolSeed(symbol).volatility * 0.00015;
+
+/** Quoted spread — a penny on liquid names, wider as price scales up. */
+export const spreadFor = (price: number): number =>
+  Math.max(0.01, Number((price * 0.00005).toFixed(2)));
+
 export const generateMockMarketData = (symbol: string): MarketData => {
-  const basePrice = Math.random() * 200 + 50;
-  const change = (Math.random() - 0.5) * 10;
+  const { price: basePrice, volatility } = getSymbolSeed(symbol);
+  // Open somewhere plausible for the session, then express the day's move
+  // relative to that rather than as a flat ±$5 for everything.
+  const open = basePrice * (1 + (Math.random() - 0.5) * 0.01 * volatility);
+  const price = open * (1 + (Math.random() - 0.5) * 0.02 * volatility);
+  const change = price - open;
+  const spread = spreadFor(price);
+
   return {
     symbol,
-    price: basePrice,
+    price,
     change,
-    changePercent: (change / basePrice) * 100,
+    changePercent: (change / open) * 100,
     volume: Math.floor(Math.random() * 10_000_000),
-    high: basePrice + Math.random() * 5,
-    low: basePrice - Math.random() * 5,
-    open: basePrice - change,
-    close: basePrice,
+    high: Math.max(open, price) * (1 + Math.random() * 0.004 * volatility),
+    low: Math.min(open, price) * (1 - Math.random() * 0.004 * volatility),
+    open,
+    close: price,
     timestamp: Date.now(),
-    bid: basePrice - 0.01,
-    ask: basePrice + 0.01,
+    bid: price - spread / 2,
+    ask: price + spread / 2,
     bidSize: Math.floor(Math.random() * 1000),
     askSize: Math.floor(Math.random() * 1000),
   };
 };
 
-export const generateMockCandlesticks = (_symbol: string, count = 100): CandlestickData[] => {
+export const generateMockCandlesticks = (symbol: string, count = 100): CandlestickData[] => {
+  const { price: seedPrice, volatility } = getSymbolSeed(symbol);
   const candles: CandlestickData[] = [];
-  let price = 100 + Math.random() * 100;
   const now = Date.now();
 
+  // Walk backwards from the seed so the last candle lands near the quoted
+  // price, rather than starting the chart at an unrelated random level.
+  let price = seedPrice * (1 - (Math.random() - 0.5) * 0.02 * volatility);
+
   for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.5) * 5;
     const open = price;
-    const close = price + change;
-    const high = Math.max(open, close) + Math.random() * 2;
-    const low = Math.min(open, close) - Math.random() * 2;
+    const close = open * (1 + (Math.random() - 0.5) * 0.004 * volatility);
+    const high = Math.max(open, close) * (1 + Math.random() * 0.002 * volatility);
+    const low = Math.min(open, close) * (1 - Math.random() * 0.002 * volatility);
     candles.push({ time: now - (count - i) * 60_000, open, high, low, close, volume: Math.floor(Math.random() * 100_000) });
     price = close;
   }
@@ -46,12 +116,15 @@ export const generateMockCandlesticks = (_symbol: string, count = 100): Candlest
 
 export const generateMockOrderBook = (price: number): OrderBookEntry[] => {
   const entries: OrderBookEntry[] = [];
+  // Ladder step scales with price: a penny-wide book is right for a $70 name
+  // and absurdly tight for a $900 one.
+  const step = Math.max(0.01, Number((price * 0.00005).toFixed(2)));
 
   for (let i = 0; i < 10; i++) {
-    entries.push({ price: price - (i + 1) * 0.01, size: Math.floor(Math.random() * 5000) + 100, total: 0, side: 'bid' });
+    entries.push({ price: price - (i + 1) * step, size: Math.floor(Math.random() * 5000) + 100, total: 0, side: 'bid' });
   }
   for (let i = 0; i < 10; i++) {
-    entries.push({ price: price + (i + 1) * 0.01, size: Math.floor(Math.random() * 5000) + 100, total: 0, side: 'ask' });
+    entries.push({ price: price + (i + 1) * step, size: Math.floor(Math.random() * 5000) + 100, total: 0, side: 'ask' });
   }
 
   let bidTotal = 0;
