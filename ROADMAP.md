@@ -34,7 +34,9 @@ backend exists, or the app is dead. The goal is making it **swappable**.
 3. ~~Replace the fabricated stats.~~ **done** — moved up from Tier 3. It does *not*
    resolve itself with the backend: fps and frame time are client-side metrics no server
    can supply, and `websocket.ts` would have replaced random-fake with constant-fake.
-4. Consolidate UI state (`UIContext` → Zustand, 20 files). Order entry lands on whichever wins.
+4. ~~Consolidate UI state (`UIContext` → Zustand).~~ **done** — 9 consumers, not 20, and
+   `uiStore.ts` had *zero*. Deleting `UIProvider` also fixed `?` and Cmd+K, which were
+   double-bound against `useKeyboard` and cancelling themselves out on the dashboard.
 5. WebSocket client tests (backoff, gap → re-snapshot, backpressure)
 
 **Phase B — backend**
@@ -153,10 +155,10 @@ Target: 1 to 2 weeks. These are the only two items that change a hiring decision
 
 Target: 2 to 3 days.
 
-- [ ] **Delete one of the two UI state layers.** `UIContext.tsx` (280 lines, Context +
-      useReducer, used by 20 files) and `uiStore.ts` (143 lines, Zustand, used by 1 file)
-      hold near-identical shapes. Keep Zustand, migrate the 20, delete the Context.
-      An abandoned half-migration reads worse than either choice alone.
+- [x] **Delete one of the two UI state layers.** Done. `uiStore.ts` turned out to have
+      no consumers at all — the "1 file" was itself, since `useUIStore` contains the
+      substring `useUI`. Kept Zustand (it already had persist, `closeAllModals` and named
+      orb actions), migrated the 9 real `useUI()` consumers, deleted `UIContext.tsx`.
 
 - [x] **Kill the `MarketStore` Context bridge.** Done. All 15 call sites now read
       through selectors; the provider reads entities via `store.getState()` so it no
