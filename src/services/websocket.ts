@@ -88,6 +88,14 @@ export class WebSocketClient {
     return this.messageQueue.dropped;
   }
 
+  /**
+   * Adopt the sequence numbers a REST snapshot was taken at, so the first
+   * delta continues from the fetched book rather than reading as a gap.
+   */
+  seedSequences(sequences: Record<string, number>): void {
+    this.orderBookHandler.seedSequences(sequences);
+  }
+
   connect(): void {
     if (this.destroyed) return;
 
