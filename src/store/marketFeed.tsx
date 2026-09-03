@@ -26,7 +26,7 @@ import { useAppSelector } from './hooks';
 import { usePerformanceStats } from '@/hooks/usePerformanceStats';
 import { selectAlerts } from './selectors';
 import type { MarketData } from '@/types';
-import { SYMBOLS, generateMockOrderBook, generateInitialFocusList } from './mockData';
+import { SYMBOLS, generateMockOrderBook, generateInitialFocusList, tickMagnitude, spreadFor } from './mockData';
 
 const TICK_INTERVAL_MS = 100;
 
@@ -56,15 +56,19 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>) {
         SYMBOLS.forEach(symbol => {
           const current = entities[symbol];
           if (!current) return;
-          const newPrice = Math.max(0.01, current.price + (Math.random() - 0.5) * 0.5);
+          // Proportional move: a flat ±$0.25 tick is noise on a $600 index and
+          // a 1.6% lurch on a $15 volatility print.
+          const drift = (Math.random() - 0.5) * 2 * tickMagnitude(symbol);
+          const newPrice = Math.max(0.01, current.price * (1 + drift));
           const newChange = newPrice - current.open;
+          const spread = spreadFor(newPrice);
           updates.push({
             ...current,
             price: newPrice,
             change: newChange,
             changePercent: (newChange / current.open) * 100,
-            bid: newPrice - 0.01,
-            ask: newPrice + 0.01,
+            bid: newPrice - spread / 2,
+            ask: newPrice + spread / 2,
             bidSize: Math.floor(Math.random() * 1000) + 100,
             askSize: Math.floor(Math.random() * 1000) + 100,
             timestamp: now,
