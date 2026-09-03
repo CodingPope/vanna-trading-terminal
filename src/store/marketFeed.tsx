@@ -1,17 +1,17 @@
 /**
  * MarketFeedProvider — drives market data into the Redux store.
  *
- * This is the seam where the data source lives. Today it runs a client-side
- * simulation; replacing it with the real transport means swapping the body of
- * `useMockFeed` for a `WebSocketClient` + `SnapshotService`, and nothing else in
- * the app changes — components read the store through selectors and neither know
- * nor care where the data came from.
+ * This is the seam where the data source lives. It probes for a backend on
+ * mount: if one answers it runs the real transport (REST snapshot, then
+ * WebSocket deltas), and if nothing answers it runs a local simulation so the
+ * app is still usable standalone. Components read the store through selectors
+ * and neither know nor care which won.
  *
  * It deliberately holds no Context and subscribes to as little as possible: the
- * rAF loop reads entities via `store.getState()` rather than `useSelector`, so
- * this component does not re-render on every tick.
+ * simulation's rAF loop reads entities via `store.getState()` rather than
+ * `useSelector`, so this component does not re-render on every tick.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import type { AppDispatch, RootState } from './store';
 import type { Store } from '@reduxjs/toolkit';
@@ -25,17 +25,26 @@ import { removePriceAlert } from './slices/panelsSlice';
 import { useAppSelector } from './hooks';
 import { usePerformanceStats } from '@/hooks/usePerformanceStats';
 import { selectAlerts } from './selectors';
+import { startLiveFeed } from './liveFeed';
+import type { LiveFeedHandle } from './liveFeed';
 import type { MarketData } from '@/types';
 import { SYMBOLS, generateMockOrderBook, generateInitialFocusList, tickMagnitude, spreadFor } from './mockData';
 
 const TICK_INTERVAL_MS = 100;
 
-/** Simulated feed: walks each symbol's price and batch-dispatches ~10x/sec. */
-function useMockFeed(dispatch: AppDispatch, store: Store<RootState>) {
+/**
+ * Simulated feed, used when no backend answers.
+ *
+ * `enabled` is a parameter rather than a conditional hook call: hooks cannot be
+ * called conditionally, and the feed's status is only known after an async
+ * probe. The effect starts the loop or does nothing.
+ */
+function useMockFeed(dispatch: AppDispatch, store: Store<RootState>, enabled: boolean) {
   const frameRef = useRef<number>(0);
   const lastTickRef = useRef<number>(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const entitiesNow = () => store.getState().market.entities;
 
     dispatch(rtkSetConnected(true));
@@ -84,7 +93,44 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>) {
 
     frameRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [dispatch, store]);
+  }, [dispatch, store, enabled]);
+}
+
+type FeedSource = 'connecting' | 'live' | 'simulated';
+
+/**
+ * Try the backend; fall back to the simulation if nothing answers.
+ *
+ * Returns which source won, so the UI can say so rather than presenting
+ * invented prices as though they came off a wire.
+ */
+function useFeedSource(dispatch: AppDispatch): FeedSource {
+  const [source, setSource] = useState<FeedSource>('connecting');
+
+  useEffect(() => {
+    let cancelled = false;
+    let handle: LiveFeedHandle | null = null;
+
+    startLiveFeed(dispatch, SYMBOLS)
+      .then(result => {
+        if (cancelled) {
+          result?.stop();
+          return;
+        }
+        handle = result;
+        setSource(result ? 'live' : 'simulated');
+      })
+      .catch(() => {
+        if (!cancelled) setSource('simulated');
+      });
+
+    return () => {
+      cancelled = true;
+      handle?.stop();
+    };
+  }, [dispatch]);
+
+  return source;
 }
 
 /** Clears triggered price alerts 5s after they fire. */
@@ -105,7 +151,8 @@ export function MarketFeedProvider({ children }: { children: React.ReactNode }) 
   const dispatch = useDispatch<AppDispatch>();
   const store = useStore<RootState>();
 
-  useMockFeed(dispatch, store);
+  const source = useFeedSource(dispatch);
+  useMockFeed(dispatch, store, source === 'simulated');
   usePerformanceStats();
   useAlertCleanup(dispatch);
 

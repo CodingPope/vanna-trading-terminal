@@ -35,6 +35,20 @@ export class OrderBookHandler {
     return true;
   }
 
+  /**
+   * Adopt the sequence a REST snapshot was taken at.
+   *
+   * Without this the `sequences` map in the snapshot response is decoration:
+   * the client would hold a book from the snapshot but expect deltas to start
+   * at 1, so the first genuine delta would read as a gap and immediately throw
+   * the book away it had just fetched.
+   */
+  seedSequences(sequences: Record<string, number>): void {
+    for (const [symbol, sequence] of Object.entries(sequences)) {
+      this.sequences.set(symbol, sequence);
+    }
+  }
+
   resetSequence(symbol: string): void { this.sequences.delete(symbol); }
   resetAll(): void { this.sequences.clear(); }
 }
