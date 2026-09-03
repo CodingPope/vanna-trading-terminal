@@ -146,13 +146,11 @@ export class WebSocketClient {
         break;
 
       case 'pong': {
-        const latency = Date.now() - this.latencyStart;
-        const mem = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+        // Report only what the socket can measure. fps, render time and memory
+        // are client-side metrics owned by usePerformanceStats; a transport
+        // asserting them would be inventing numbers.
         this.dispatch(setStats({
-          fps: 60,
-          memoryUsage: mem ? Math.round(mem.usedJSHeapSize / 1_048_576) : 0,
-          wsLatency: latency,
-          renderTime: 0,
+          wsLatency: Date.now() - this.latencyStart,
           lastUpdate: Date.now(),
         }));
         break;

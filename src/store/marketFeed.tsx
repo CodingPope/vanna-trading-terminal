@@ -17,13 +17,13 @@ import type { AppDispatch, RootState } from './store';
 import type { Store } from '@reduxjs/toolkit';
 import {
   batchUpdateMarketData,
-  setStats as rtkSetStats,
   setConnected as rtkSetConnected,
 } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
 import { setFocusList } from './slices/positionsSlice';
 import { removePriceAlert } from './slices/panelsSlice';
 import { useAppSelector } from './hooks';
+import { usePerformanceStats } from '@/hooks/usePerformanceStats';
 import { selectAlerts } from './selectors';
 import type { MarketData } from '@/types';
 import { SYMBOLS, generateMockOrderBook, generateInitialFocusList } from './mockData';
@@ -83,30 +83,6 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>) {
   }, [dispatch, store]);
 }
 
-/**
- * Stats reporter.
- *
- * `memoryUsage` is real where the browser exposes `performance.memory`.
- * fps / wsLatency / renderTime are still synthetic — see ROADMAP "Replace the
- * fabricated stats". They are wired to a real rAF counter and PerformanceObserver
- * when the live feed lands.
- */
-function useStatsReporter(dispatch: AppDispatch) {
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const mem = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
-      dispatch(rtkSetStats({
-        fps: Math.floor(58 + Math.random() * 4),
-        memoryUsage: mem ? Math.round(mem.usedJSHeapSize / 1_048_576) : Math.floor(50 + Math.random() * 100),
-        wsLatency: Math.floor(10 + Math.random() * 50),
-        renderTime: Math.floor(8 + Math.random() * 10),
-        lastUpdate: Date.now(),
-      }));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [dispatch]);
-}
-
 /** Clears triggered price alerts 5s after they fire. */
 function useAlertCleanup(dispatch: AppDispatch) {
   const alerts = useAppSelector(selectAlerts);
@@ -126,7 +102,7 @@ export function MarketFeedProvider({ children }: { children: React.ReactNode }) 
   const store = useStore<RootState>();
 
   useMockFeed(dispatch, store);
-  useStatsReporter(dispatch);
+  usePerformanceStats();
   useAlertCleanup(dispatch);
 
   return <>{children}</>;
