@@ -18,6 +18,13 @@ export interface MarketSliceState {
   marketRegime: MarketRegime;
   stats: StatsForNerds;
   isConnected: boolean;
+  /**
+   * Where the data on screen is actually coming from. `isConnected` alone
+   * could not distinguish a live socket from the local simulation, so the
+   * footer read LIVE either way — next to a latency readout with nothing
+   * behind it.
+   */
+  feedSource: 'connecting' | 'live' | 'simulated';
   lastUpdate: number;
 }
 
@@ -29,6 +36,7 @@ const initialState: MarketSliceState = {
   marketRegime: { trend: 'bullish', volatility: 'medium', breadth: 'strong', sentiment: 'neutral' },
   stats: { fps: 60, memoryUsage: 0, wsLatency: 0, renderTime: 0, lastUpdate: Date.now() },
   isConnected: false,
+  feedSource: 'connecting',
   lastUpdate: Date.now(),
 };
 
@@ -73,6 +81,9 @@ export const marketSlice = createSlice({
     setConnected(state, action: PayloadAction<boolean>) {
       state.isConnected = action.payload;
     },
+    setFeedSource(state, action: PayloadAction<MarketSliceState['feedSource']>) {
+      state.feedSource = action.payload;
+    },
   },
 });
 
@@ -86,6 +97,7 @@ export const {
   setMarketRegime,
   setStats,
   setConnected,
+  setFeedSource,
 } = marketSlice.actions;
 
 export default marketSlice.reducer;

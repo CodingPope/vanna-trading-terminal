@@ -10,6 +10,7 @@ export const selectCurrentPhase = (state: RootState) => state.market.currentPhas
 export const selectMarketRegime = (state: RootState) => state.market.marketRegime;
 export const selectStats = (state: RootState) => state.market.stats;
 export const selectIsConnected = (state: RootState) => state.market.isConnected;
+export const selectFeedSource = (state: RootState) => state.market.feedSource;
 export const selectAllCandlesticks = (state: RootState) => state.market.candlesticks;
 export const selectLastUpdate = (state: RootState) => state.market.lastUpdate;
 
