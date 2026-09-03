@@ -1,4 +1,22 @@
 services:
+  # Market data service: REST snapshot + WebSocket delta stream.
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Browser bundle behind nginx, which also proxies /api and /ws to the api
+  # service — so the app talks to same-origin paths and needs no CORS or
+  # environment-specific base URL.
   vanna:
     build:
       context: .
@@ -7,5 +25,8 @@ services:
     ports:
       - "3000:80"
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
