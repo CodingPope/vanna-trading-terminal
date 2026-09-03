@@ -19,7 +19,10 @@ export function StatsFooter() {
         
         <div className="flex items-center gap-1.5 text-vanna-text-secondary">
           <Wifi className="w-3 h-3" />
-          <span>{stats.wsLatency}ms</span>
+          {/* Only a real socket can measure latency; no socket, no number. */}
+          <span title="WebSocket round-trip latency">
+            {stats.wsLatency ? `${stats.wsLatency}ms` : '—'}
+          </span>
         </div>
       </div>
 
@@ -38,12 +41,17 @@ export function StatsFooter() {
         
         <div className="flex items-center gap-1.5 text-vanna-text-secondary">
           <Cpu className="w-3 h-3" />
-          <span>{stats.memoryUsage}MB</span>
+          {/* performance.memory is Chromium-only. */}
+          <span title="JS heap in use">
+            {stats.memoryUsage ? `${stats.memoryUsage}MB` : '—'}
+          </span>
         </div>
-        
+
         <div className="flex items-center gap-1.5 text-vanna-text-secondary">
           <Clock className="w-3 h-3" />
-          <span>{stats.renderTime}ms</span>
+          <span title="Longest frame in the last second">
+            {stats.renderTime ? `${stats.renderTime}ms peak` : '—'}
+          </span>
         </div>
         
         <div className="text-vanna-text-secondary">

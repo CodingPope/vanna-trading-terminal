@@ -62,8 +62,13 @@ export const marketSlice = createSlice({
     setMarketRegime(state, action: PayloadAction<MarketRegime>) {
       state.marketRegime = action.payload;
     },
-    setStats(state, action: PayloadAction<StatsForNerds>) {
-      state.stats = action.payload;
+    /**
+     * Merges, rather than replaces, so each producer reports only what it can
+     * actually measure: the renderer knows fps and frame time, the socket knows
+     * latency. Neither should be inventing the other's numbers.
+     */
+    setStats(state, action: PayloadAction<Partial<StatsForNerds>>) {
+      Object.assign(state.stats, action.payload);
     },
     setConnected(state, action: PayloadAction<boolean>) {
       state.isConnected = action.payload;
