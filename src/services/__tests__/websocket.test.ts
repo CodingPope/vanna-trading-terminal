@@ -77,6 +77,13 @@ class FakeWebSocket {
 /** The most recently constructed socket. */
 const latest = () => FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
 
+/**
+ * Run the queue drain. Data messages are processed on an animation frame, so
+ * nothing is applied until a frame passes — tests that assert the *absence* of
+ * a re-snapshot would otherwise pass without ever having processed anything.
+ */
+const flush = () => vi.advanceTimersByTime(16);
+
 function makeClient() {
   const dispatch = vi.fn() as unknown as AppDispatch;
   const client = new WebSocketClient({ url: 'ws://test/stream', dispatch });
@@ -202,6 +209,7 @@ describe('order book sequence validation', () => {
     ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 2, data: bookEntry(101) });
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 3, data: bookEntry(102) });
+    flush();
 
     expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
     client.destroy();
@@ -215,6 +223,7 @@ describe('order book sequence validation', () => {
     ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
     // 2 never arrives.
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 3, data: bookEntry(102) });
+    flush();
 
     const resubscribes = ws.sentMessages.filter(m => m.type === 'subscribe');
     expect(resubscribes).toHaveLength(1);
@@ -229,9 +238,11 @@ describe('order book sequence validation', () => {
     ws.accept();
 
     ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+    flush();
     (dispatch as unknown as ReturnType<typeof vi.fn>).mockClear();
 
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 3, data: bookEntry(102) });
+    flush();
 
     // A book that silently missed an update is worse than no book: it looks
     // right and prices wrong. Nothing should reach the store.
@@ -254,6 +265,7 @@ describe('order book sequence validation', () => {
     // Interleaved, each correct for its own symbol.
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 2, data: bookEntry(101) });
     ws.push({ type: 'order_book_delta', symbol: 'MSFT', sequence: 2, data: bookEntry(201) });
+    flush();
 
     expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
     client.destroy();
@@ -263,6 +275,7 @@ describe('order book sequence validation', () => {
     const { client } = makeClient();
     latest().accept();
     latest().push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 5, data: bookEntry(100) });
+    flush();
 
     latest().drop();
     vi.advanceTimersByTime(1000);
@@ -273,6 +286,7 @@ describe('order book sequence validation', () => {
     // Sequences were reset on reconnect, so seq 6 is now treated as a gap
     // (expected 1) rather than silently trusted against pre-drop state.
     reconnected.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 6, data: bookEntry(101) });
+    flush();
 
     expect(reconnected.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(1);
     client.destroy();
@@ -362,25 +376,85 @@ describe('behaviour under a message burst', () => {
     client.destroy();
   });
 
-  it('DOCUMENTS A GAP: the priority queue never sheds, because it is drained on every message', () => {
+  it('sheds low-priority messages once the queue is over capacity', () => {
     const { client, dispatch } = makeClient();
     const ws = latest();
     ws.accept();
 
-    // 2000 distinct symbols — twice the BackpressureQueue's 1000 capacity, and
-    // all low priority, so a working queue would have dropped roughly half.
-    for (let i = 0; i < 2000; i++) {
+    // 600 distinct symbols inside one frame, against a 250 capacity.
+    for (let i = 0; i < 600; i++) {
       ws.push({ type: 'market_data', data: { symbol: `SYM${i}`, price: i, timestamp: i } });
     }
     vi.advanceTimersByTime(16);
 
+    expect(client.droppedMessages).toBeGreaterThan(0);
     const written = marketWrites(dispatch)[0].payload as unknown[];
+    expect(written.length).toBeLessThan(600);
+    expect(written.length).toBeLessThanOrEqual(250);
 
-    // Every single one survives. enqueueAndProcess() enqueues one message then
-    // drains the whole queue synchronously, so the queue never holds more than
-    // one item and its maxSize of 1000 is unreachable. The load shedding that
-    // actually happens is MarketDataHandler's per-frame dedup above, not this.
-    expect(written).toHaveLength(2000);
+    client.destroy();
+  });
+
+  it('protects order book deltas by shedding market data first', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+
+    // 200 deltas — inside the 250 capacity — buried in 900 market data ticks.
+    for (let i = 0; i < 900; i++) {
+      ws.push({ type: 'market_data', data: { symbol: `SYM${i}`, price: i, timestamp: i } });
+      if (i < 200) {
+        ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: i + 2, data: bookEntry(100 + i) });
+      }
+    }
+    flush();
+
+    // Assert presence before absence: "no re-snapshot" is also satisfied by
+    // "no delta was ever processed", which would leave an empty book.
+    const applied = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => (c[0] as { type: string }).type)
+      .filter(t => t.includes('applyDelta'));
+    expect(applied).toHaveLength(200);
+
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
+    expect(client.droppedMessages).toBeGreaterThan(0);
+
+    client.destroy();
+  });
+
+  it('detects the loss on the next message when even high-priority overflows', () => {
+    const { client } = makeClient();
+    const ws = latest();
+    ws.accept();
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+
+    // 400 deltas with no low-priority traffic to evict. Once the queue is full
+    // of high-priority messages there is nothing left to shed, so incoming ones
+    // are dropped: the queue cannot protect what exceeds it on its own.
+    for (let i = 0; i < 400; i++) {
+      ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: i + 2, data: bookEntry(100 + i) });
+    }
+    flush();
+
+    expect(client.droppedMessages).toBeGreaterThan(0);
+
+    // Note *where* the loss lands: the queue evicts what is arriving, so it
+    // keeps a contiguous run from the start and everything dropped is at the
+    // tail. There is no hole to spot yet — the book has simply stopped, which
+    // is why nothing has been re-requested at this point.
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
+
+    // The loss only becomes visible when the stream resumes, and then sequence
+    // validation catches it: backpressure could not save the book, so the
+    // layer beneath it refuses the delta and asks for a fresh snapshot rather
+    // than letting a hole through.
+    ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 500, data: bookEntry(999) });
+    flush();
+
+    const resubscribes = ws.sentMessages.filter(m => m.type === 'subscribe');
+    expect(resubscribes).toHaveLength(1);
+    expect(resubscribes[0]).toMatchObject({ symbol: 'AAPL', requestSnapshot: true });
 
     client.destroy();
   });

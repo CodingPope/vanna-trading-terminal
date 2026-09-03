@@ -26,7 +26,13 @@ export class MarketDataHandler {
     }
   }
 
-  private flush(): void {
+  /**
+   * Public so the socket client can flush at the end of its own frame drain.
+   * Without that, a market data update would wait two frames — one for the
+   * queue to drain, another for this batch to fire — for no benefit, since the
+   * drain is already running inside an animation frame.
+   */
+  flush(): void {
     if (this.pending.length > 0) {
       this.dispatch(batchUpdateMarketData([...this.pending]));
       this.pending = [];
