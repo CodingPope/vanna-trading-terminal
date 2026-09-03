@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import { StatsFooter } from '@/components/StatsFooter';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { CommandPalette } from '@/components/CommandPalette';
+import { SettingsDialog } from '@/components/SettingsDialog';
 import { Notifications } from '@/components/Notifications';
 import { WatchlistPanel } from '@/components/panels/WatchlistPanel';
 import { ChartPanel } from '@/components/panels/ChartPanel';
@@ -328,6 +329,7 @@ export function Dashboard() {
       
       {/* Overlays */}
       <KeyboardShortcuts />
+      <SettingsDialog />
       <CommandPalette />
       <Notifications />
     </div>

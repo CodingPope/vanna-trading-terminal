@@ -4,6 +4,12 @@ import { selectSelectedSymbol, selectMarketData, selectCandlesticks } from '@/st
 import type { RootState } from '@/store/store';
 import { LightweightChart } from './LightweightChart';
 import {
+  aggregateCandles,
+  isTimeframeUsable,
+  TIMEFRAME_MINUTES,
+  type Timeframe,
+} from '@/lib/candles';
+import {
   BarChart3,
   CandlestickChart,
   LineChart,
@@ -31,7 +37,6 @@ interface ChartPanelProps {
 }
 
 type ChartType = 'candlestick' | 'line' | 'area';
-type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d' | '1w';
 
 interface ChartDatum {
   time: string;
@@ -187,7 +192,14 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
   const [useLightweight, setUseLightweight] = useState(true); // TradingView by default
 
   const marketData = useAppSelector((s: RootState) => selectMarketData(s, symbol));
-  const candlesticks = useAppSelector((s: RootState) => selectCandlesticks(s, symbol));
+  const rawCandles = useAppSelector((s: RootState) => selectCandlesticks(s, symbol));
+
+  // The feed publishes one-minute bars; every other timeframe is rolled up
+  // from them here. Before this the timeframe buttons set state nothing read.
+  const candlesticks = useMemo(
+    () => aggregateCandles(rawCandles, TIMEFRAME_MINUTES[timeframe]),
+    [rawCandles, timeframe],
+  );
 
   const chartData = useMemo(() => {
     return candlesticks.map(candle => ({
@@ -281,18 +293,28 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
           
           {/* Timeframe selector */}
           <div className="flex items-center gap-0.5 ml-4">
-            {(['1m', '5m', '15m', '1h', '1d', '1w'] as Timeframe[]).map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors
-                  ${timeframe === tf 
-                    ? 'bg-vanna-cyan/20 text-vanna-cyan' 
-                    : 'text-vanna-text-secondary hover:text-vanna-text hover:bg-white/5'}`}
-              >
-                {tf.toUpperCase()}
-              </button>
-            ))}
+            {(['1m', '5m', '15m', '1h', '1d', '1w'] as Timeframe[]).map((tf) => {
+              // One session of one-minute bars cannot make a daily chart. A
+              // disabled control that says why beats an enabled one that
+              // renders four rectangles.
+              const usable = isTimeframeUsable(rawCandles, tf);
+              return (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  disabled={!usable}
+                  title={usable ? undefined : `Not enough history loaded for ${tf.toUpperCase()}`}
+                  className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors
+                    ${!usable
+                      ? 'text-vanna-text-secondary/30 cursor-not-allowed'
+                      : timeframe === tf
+                        ? 'bg-vanna-cyan/20 text-vanna-cyan'
+                        : 'text-vanna-text-secondary hover:text-vanna-text hover:bg-white/5'}`}
+                >
+                  {tf.toUpperCase()}
+                </button>
+              );
+            })}
           </div>
         </div>
 
