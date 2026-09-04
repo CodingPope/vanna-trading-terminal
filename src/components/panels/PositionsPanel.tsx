@@ -1,7 +1,7 @@
 import { useState, memo } from 'react';
 import { useSelector } from 'react-redux';
 import { ArrowUp, ArrowDown, Plus, MoreHorizontal } from 'lucide-react';
-import { selectPositions, selectUnrealizedPnL } from '@/store/selectors';
+import { selectPositionsWithPnL, selectUnrealizedPnL } from '@/store/selectors';
 import type { Position } from '@/types';
 
 // Memoized row — only re-renders when the position data changes
@@ -52,7 +52,8 @@ export function PositionsPanel({ compact = false }: PositionsPanelProps) {
   const [activeTab, setActiveTab] = useState<'positions' | 'orders' | 'history'>('positions');
 
   // Read from RTK store
-  const positions = useSelector(selectPositions);
+  // Marked live: P&L follows the price rather than the last server message.
+  const positions = useSelector(selectPositionsWithPnL);
   const totalPnl = useSelector(selectUnrealizedPnL);
   const totalPnlPercent = positions.length > 0
     ? positions.reduce((acc, p) => acc + p.pnlPercent, 0) / positions.length

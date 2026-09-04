@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .models import CandlestickData, MarketData, OrderBookEntry, Side, Trade
+from .models import CandlestickData, MarketData, OrderBookEntry, Position, Side, Trade
 
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "session.json"
 
@@ -176,6 +176,7 @@ class ReplayEngine:
         self.session_date: Optional[str] = None
         self.is_replay = False
         self.states: Dict[str, SymbolState] = {}
+        self._positions: Optional[List[Position]] = None
         self._load(fixture_path)
 
     # ── setup ────────────────────────────────────────────────────────────────
@@ -314,6 +315,51 @@ class ReplayEngine:
             bidSize=float(self.rng.randrange(100, 1200)),
             askSize=float(self.rng.randrange(100, 1200)),
         )
+
+    # ── positions ────────────────────────────────────────────────────────────
+
+    def positions(self) -> List[Position]:
+        """
+        A small book of open positions.
+
+        Seeded once and stable, because nothing can change them yet: there is
+        no order entry. When that lands, fills mutate this and the server
+        starts pushing position_update frames. Marks are filled in from the
+        current price here, but the client recomputes them every tick.
+        """
+        if self._positions is None:
+            self._positions = self._seed_positions()
+
+        marked: List[Position] = []
+        for p in self._positions:
+            price = self.states[p.symbol].price if p.symbol in self.states else p.entryPrice
+            direction = 1 if p.side == "long" else -1
+            pnl = (price - p.entryPrice) * p.size * direction
+            marked.append(Position(
+                symbol=p.symbol, side=p.side, size=p.size, entryPrice=p.entryPrice,
+                currentPrice=round(price, 4),
+                pnl=round(pnl, 2),
+                pnlPercent=round(((price - p.entryPrice) / p.entryPrice) * 100 * direction, 4),
+            ))
+        return marked
+
+    def _seed_positions(self) -> List[Position]:
+        rng = random.Random(11)
+        held = [s for s in ("AAPL", "NVDA", "TSLA", "SPY", "PLTR") if s in self.states]
+        out: List[Position] = []
+        for symbol in held:
+            price = self.states[symbol].price
+            side = "long" if rng.random() < 0.7 else "short"
+            # Entry sits a little either side of where the session is now, so
+            # the book opens with a mix of winners and losers rather than a
+            # page of zeroes.
+            entry = round(price * (1 + (rng.random() - 0.45) * 0.02), 4)
+            out.append(Position(
+                symbol=symbol, side=side,
+                size=float(rng.choice([100, 200, 250, 500, 1000])),
+                entryPrice=entry, currentPrice=price, pnl=0.0, pnlPercent=0.0,
+            ))
+        return out
 
     # ── tape ─────────────────────────────────────────────────────────────────
 

@@ -240,4 +240,24 @@ test.describe('terminal', () => {
     // The reading is scoped, so the sample size follows the chosen universe.
     await expect(settings.getByText(/symbols?$/)).toBeVisible();
   });
+
+  test('positions load and mark to the live price', async ({ page }) => {
+    await enterTerminal(page);
+
+    const panel = page.getByText('POSITIONS').first()
+      .locator('xpath=ancestor::div[contains(@class,"glass-panel")]');
+
+    // The book used to be initialised empty and never filled, so this panel
+    // read "No open positions" and +$0.00 P&L permanently.
+    await expect(panel).not.toContainText('No open positions', { timeout: 20_000 });
+    await expect(panel.getByText('AAPL').first()).toBeVisible();
+
+    // P&L is derived from the live quote, so the marks move as the market
+    // does rather than waiting on a server message. Compare the panel's whole
+    // text: row P&L renders without decimals, so targeting a currency pattern
+    // with cents matches nothing and quietly compares null to null.
+    const before = await panel.innerText();
+    await expect.poll(async () => panel.innerText(), { timeout: 20_000 })
+      .not.toBe(before);
+  });
 });
