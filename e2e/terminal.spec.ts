@@ -184,4 +184,24 @@ test.describe('terminal', () => {
 
     await expect(page.getByRole('button', { name: /enter terminal/i })).toBeVisible();
   });
+
+  test('the shortcut map appears in settings and matches the ? modal', async ({ page }) => {
+    await enterTerminal(page);
+
+    await page.getByRole('button', { name: 'Settings' }).first().click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await expect(settings.getByText('Keyboard shortcuts')).toBeVisible();
+    await expect(settings.getByText('Command palette')).toBeVisible();
+
+    // Both surfaces render from lib/shortcuts, so a shortcut in one is in the
+    // other. The old modal kept its own copy and drifted.
+    await expect(settings).not.toContainText('Execute order');
+    await settings.getByRole('button', { name: 'Close settings' }).click();
+
+    await page.keyboard.press('Shift+Slash');
+    const modal = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Command palette')).toBeVisible();
+    await expect(modal).not.toContainText('Execute order');
+  });
 });

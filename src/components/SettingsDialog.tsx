@@ -10,7 +10,8 @@
  * `sidebarCollapsed` to localStorage and leaves transient UI alone.
  */
 import { useUIStore } from '@/store/uiStore';
-import { X, Settings as SettingsIcon } from 'lucide-react';
+import { X, Settings as SettingsIcon, Keyboard } from 'lucide-react';
+import { ShortcutTable } from './ShortcutTable';
 import type { UserSettings } from '@/types';
 
 const TIMEFRAMES: UserSettings['defaultTimeframe'][] = ['1m', '5m', '15m', '1h', '1d'];
@@ -148,6 +149,20 @@ export function SettingsDialog() {
               className="w-full accent-vanna-cyan"
             />
           </div>
+        </div>
+
+        <div className="px-4 py-3 border-t border-white/5">
+          <div className="flex items-center gap-2 mb-3">
+            <Keyboard className="w-3.5 h-3.5 text-vanna-cyan" />
+            <span className="text-[11px] uppercase tracking-wider text-vanna-text">
+              Keyboard shortcuts
+            </span>
+            <span className="text-[10px] text-vanna-text-secondary ml-auto">
+              also on <kbd className="px-1 py-0.5 bg-vanna-surface border border-white/10 rounded">?</kbd>
+            </span>
+          </div>
+          {/* Same source as the ? modal — one list, so they cannot disagree. */}
+          <ShortcutTable columns={1} />
         </div>
 
         <div className="px-4 py-3 border-t border-white/5 text-[10px] text-vanna-text-secondary">

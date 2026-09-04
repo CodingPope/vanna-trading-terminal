@@ -22,8 +22,20 @@ const mount = () => renderHook(() => useKeyboard(), { wrapper });
  * is mounted — was that neither shortcut did anything. These assert a single
  * toggle per press.
  */
+/**
+ * Dispatch a keydown the way a browser would.
+ *
+ * `code` matters: react-hotkeys-hook matches chords like 'shift+slash' on the
+ * physical key, and a browser reports key '?' with code 'Slash' for shift+/.
+ * Omitting it made an event no real keyboard produces, which is how a dead
+ * shortcut kept a green test.
+ */
+const CODES: Record<string, string> = { '?': 'Slash', '/': 'Slash' };
+
 function press(key: string, init: KeyboardEventInit = {}) {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  document.dispatchEvent(
+    new KeyboardEvent('keydown', { key, code: CODES[key], bubbles: true, ...init }),
+  );
 }
 
 describe('useKeyboard', () => {
@@ -43,7 +55,8 @@ describe('useKeyboard', () => {
 
   it('opens the shortcuts modal on one ? press', () => {
     mount();
-    press('/', { shiftKey: true });
+    // What a browser actually sends for shift+/ on a US layout.
+    press('?', { shiftKey: true });
     expect(useUIStore.getState().showKeyboardShortcuts).toBe(true);
   });
 
