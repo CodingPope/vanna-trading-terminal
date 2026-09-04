@@ -112,8 +112,12 @@ export interface Trade {
   timestamp: number;
 }
 
+export type OrbScope = 'market' | 'focus';
+
 export interface UserSettings {
   highContrastMode: boolean;
+  /** Which universe the orb summarises: everything, or just the focus list. */
+  orbScope: OrbScope;
   soundEnabled: boolean;
   notificationsEnabled: boolean;
   defaultTimeframe: '1m' | '5m' | '15m' | '1h' | '1d';

@@ -10,8 +10,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, AdaptiveDpr, Preload, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { useUIStore } from '@/store/uiStore';
-import { useAppSelector } from '@/store/hooks';
-import { selectMarketPulse } from '@/store/selectors';
+import { useMarketPulse } from '@/hooks/useMarketPulse';
 import { normalise, PULSE_SCALE } from '@/lib/marketPulse';
 import { useOrbStore } from '@/store/orbStore';
 
@@ -240,7 +239,7 @@ interface DisplacementOrbProps {
 
 export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbProps) {
   const enterDashboard = useUIStore(s => s.enterDashboard);
-  const pulse = useAppSelector(selectMarketPulse);
+  const { pulse } = useMarketPulse();
 
   // Continuous, not bucketed. This previously read the three-value regime enum
   // and mapped it to a handful of constants, so the orb had 27 possible
@@ -311,7 +310,7 @@ export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbP
 export function OrbIndicator({ size = 40 }: { size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
-  const pulse = useAppSelector(selectMarketPulse);
+  const { pulse } = useMarketPulse();
 
   useEffect(() => {
     if (!canvasRef.current) return;

@@ -12,6 +12,7 @@
 import { useUIStore } from '@/store/uiStore';
 import { X, Settings as SettingsIcon, Keyboard } from 'lucide-react';
 import { ShortcutTable } from './ShortcutTable';
+import { OrbLegend } from './OrbLegend';
 import type { UserSettings } from '@/types';
 
 const TIMEFRAMES: UserSettings['defaultTimeframe'][] = ['1m', '5m', '15m', '1h', '1d'];
@@ -149,6 +150,10 @@ export function SettingsDialog() {
               className="w-full accent-vanna-cyan"
             />
           </div>
+        </div>
+
+        <div className="px-4 py-3 border-t border-white/5">
+          <OrbLegend />
         </div>
 
         <div className="px-4 py-3 border-t border-white/5">

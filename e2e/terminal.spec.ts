@@ -221,4 +221,23 @@ test.describe('terminal', () => {
     await expect.poll(async () => rows.count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(first);
   });
+
+  test('the orb legend explains the sphere and switches scope', async ({ page }) => {
+    await enterTerminal(page);
+    await page.getByRole('button', { name: 'Settings' }).first().click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+
+    // A key that reads live values, so it doubles as a readout.
+    await expect(settings.getByText('Market orb')).toBeVisible();
+    await expect(settings.getByText('Shape')).toBeVisible();
+    await expect(settings.getByText(/Dispersion/)).toBeVisible();
+
+    const focus = settings.getByRole('button', { name: 'Focus list' });
+    await expect(focus).toHaveAttribute('aria-pressed', 'false');
+    await focus.click();
+    await expect(focus).toHaveAttribute('aria-pressed', 'true');
+
+    // The reading is scoped, so the sample size follows the chosen universe.
+    await expect(settings.getByText(/symbols?$/)).toBeVisible();
+  });
 });

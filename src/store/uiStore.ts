@@ -101,6 +101,7 @@ export const useUIStore = create<UIStoreState>()(
       // Settings
       settings: {
         highContrastMode: false,
+        orbScope: 'market',
         soundEnabled: true,
         notificationsEnabled: true,
         defaultTimeframe: '5m',

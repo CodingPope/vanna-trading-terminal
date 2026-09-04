@@ -1,7 +1,15 @@
+import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { store } from '@/store/store';
 import { useUIStore } from '@/store/uiStore';
 import { SettingsDialog } from '../SettingsDialog';
+
+// The dialog now carries the orb legend, which reads live market state, so it
+// needs the Redux store as well as the Zustand one.
+const render = (ui: React.ReactElement) =>
+  rtlRender(<Provider store={store}>{ui}</Provider>);
 
 /**
  * The store carried `settings`, `updateSettings` and `showSettings` from the
@@ -14,6 +22,7 @@ beforeEach(() => {
     showSettings: false,
     settings: {
       highContrastMode: false,
+      orbScope: 'market' as const,
       soundEnabled: true,
       notificationsEnabled: true,
       defaultTimeframe: '5m',
@@ -78,5 +87,40 @@ describe('SettingsDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
 
     expect(useUIStore.getState().showSettings).toBe(false);
+  });
+});
+
+describe('orb legend', () => {
+  it('explains what each visual channel means', () => {
+    useUIStore.setState({ showSettings: true });
+    render(<SettingsDialog />);
+
+    // Without a key the orb is a decorative blob.
+    for (const channel of ['Shape', 'Speed', 'Colour', 'Detail']) {
+      expect(screen.getByText(channel)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Dispersion/)).toBeInTheDocument();
+    expect(screen.getByText(/Volatility/)).toBeInTheDocument();
+    expect(screen.getByText(/Breadth/)).toBeInTheDocument();
+  });
+
+  it('lets the scope be switched to the focus list', () => {
+    useUIStore.setState({ showSettings: true });
+    render(<SettingsDialog />);
+
+    expect(useUIStore.getState().settings.orbScope).toBe('market');
+    fireEvent.click(screen.getByRole('button', { name: 'Focus list' }));
+
+    expect(useUIStore.getState().settings.orbScope).toBe('focus');
+  });
+
+  it('marks the active scope for assistive tech', () => {
+    useUIStore.setState({ showSettings: true });
+    render(<SettingsDialog />);
+
+    expect(screen.getByRole('button', { name: 'Whole market' }))
+      .toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Focus list' }))
+      .toHaveAttribute('aria-pressed', 'false');
   });
 });

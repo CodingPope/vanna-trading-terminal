@@ -24,6 +24,25 @@ export const selectMarketPulse = createSelector(
   (entities) => computeMarketPulse(Object.values(entities))
 );
 
+/**
+ * The same reading, narrowed to the focus list.
+ *
+ * Dispersion across twenty names and across the five you are actually watching
+ * are different questions — the whole market can be calm while your names tear
+ * apart. Which one the orb shows is a user setting.
+ */
+export const selectFocusPulse = createSelector(
+  [selectAllMarketEntities, (state: RootState) => state.positions.focusList],
+  (entities, focusList) => {
+    const quotes = focusList
+      .map(item => entities[item.symbol])
+      .filter((q): q is NonNullable<typeof q> => Boolean(q));
+    // Fall back to the whole market rather than showing an empty orb before
+    // the focus list has been generated.
+    return computeMarketPulse(quotes.length ? quotes : Object.values(entities));
+  }
+);
+
 /** Text labels for the header and morning brief, from the same numbers. */
 export const selectMarketRegime = createSelector(
   [selectMarketPulse],
