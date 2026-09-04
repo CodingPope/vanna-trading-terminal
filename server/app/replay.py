@@ -360,10 +360,15 @@ class ReplayEngine:
         return self.states[symbol].sequence
 
     def resnapshot(self, symbol: str) -> List[OrderBookEntry]:
-        """Re-seed the ladder at the current mid and hand back a full snapshot."""
-        state = self.states[symbol]
-        self._seed_book(state)
-        return self._entries(state)
+        """
+        The current book, as a full snapshot.
+
+        Deliberately does not rebuild anything. The book is already coherent,
+        and this state is shared by every connected client — re-seeding it here
+        meant one client recovering from a gap silently replaced the ladder
+        underneath everyone else, with no sequence bump to tell them.
+        """
+        return self._entries(self.states[symbol])
 
     def candlesticks(self, symbol: str, count: int = 100) -> List[CandlestickData]:
         """

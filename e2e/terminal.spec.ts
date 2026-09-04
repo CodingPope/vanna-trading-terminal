@@ -135,4 +135,53 @@ test.describe('terminal', () => {
       await expect(page.getByTitle('WebSocket round-trip latency')).not.toHaveText('—');
     }
   });
+
+  test('chart type switches the series in the default TradingView view', async ({ page }) => {
+    await enterTerminal(page);
+    const chart = page.locator('canvas').first();
+
+    // The default view had no chartType prop at all, so these three buttons
+    // changed state nothing read.
+    await page.getByRole('button', { name: 'Candlestick chart' }).first().click();
+    await page.waitForTimeout(900);
+    const candles = await chart.screenshot();
+
+    await page.getByRole('button', { name: 'Line chart' }).first().click();
+    await page.waitForTimeout(900);
+    const line = await chart.screenshot();
+
+    expect(Buffer.compare(candles, line)).not.toBe(0);
+  });
+
+  test('the search bar opens the command palette its badge advertises', async ({ page }) => {
+    await enterTerminal(page);
+
+    await page.getByRole('button', { name: 'Search symbols' }).click();
+
+    // It used to be an input that accepted keystrokes and did nothing at all.
+    await expect(page.getByPlaceholder(/type a command/i)).toBeVisible();
+  });
+
+  test('the bell opens a notification history', async ({ page }) => {
+    await enterTerminal(page);
+
+    await page.getByRole('button', { name: 'Notifications' }).click();
+    const panel = page.getByRole('dialog', { name: 'Notifications' });
+    await expect(panel).toBeVisible();
+
+    // The welcome toast auto-dismisses after 5s; the history is where it
+    // survives. Either it is listed, or the empty state says so plainly.
+    await expect(panel).toContainText(/Welcome to VANNA|No notifications/);
+
+    await panel.getByRole('button', { name: 'Close notifications' }).click();
+    await expect(panel).not.toBeVisible();
+  });
+
+  test('the logo returns to the landing page', async ({ page }) => {
+    await enterTerminal(page);
+
+    await page.getByRole('button', { name: 'Return to landing page' }).click();
+
+    await expect(page.getByRole('button', { name: /enter terminal/i })).toBeVisible();
+  });
 });
