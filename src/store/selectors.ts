@@ -138,9 +138,39 @@ export const selectTapeBias = createSelector(
 export const selectPositions = (state: RootState) => state.positions.positions;
 export const selectFocusList = (state: RootState) => state.positions.focusList;
 
+/**
+ * Positions marked against the live quote.
+ *
+ * The server sends the durable facts — what you hold, how much, what you paid
+ * — and the mark is recomputed here on every tick. Trusting the server's `pnl`
+ * would leave the number stale between updates, sitting next to a price that
+ * has already moved; a lagging P&L is worse than none, because it looks
+ * authoritative.
+ *
+ * Short positions gain when price falls, hence the direction term.
+ */
+export const selectPositionsWithPnL = createSelector(
+  [selectPositions, selectAllMarketEntities],
+  (positions, entities) =>
+    positions.map(position => {
+      const quote = entities[position.symbol];
+      if (!quote) return position;
+
+      const direction = position.side === 'long' ? 1 : -1;
+      const move = quote.price - position.entryPrice;
+
+      return {
+        ...position,
+        currentPrice: quote.price,
+        pnl: move * position.size * direction,
+        pnlPercent: (move / position.entryPrice) * 100 * direction,
+      };
+    })
+);
+
 /** Memoized total unrealized PnL across all open positions. */
 export const selectUnrealizedPnL = createSelector(
-  selectPositions,
+  selectPositionsWithPnL,
   (positions) => positions.reduce((acc, p) => acc + p.pnl, 0)
 );
 

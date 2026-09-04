@@ -1,10 +1,11 @@
-import type { MarketData, OrderBookEntry, CandlestickData, Trade } from '@/types';
+import type { MarketData, OrderBookEntry, CandlestickData, Trade, Position } from '@/types';
 
 interface SnapshotResponse {
   marketData: Record<string, MarketData>;
   orderBooks: Record<string, OrderBookEntry[]>;
   candlesticks?: Record<string, CandlestickData[]>;
   trades?: Record<string, Trade[]>;
+  positions?: Position[];
   sequences: Record<string, number>;
 }
 

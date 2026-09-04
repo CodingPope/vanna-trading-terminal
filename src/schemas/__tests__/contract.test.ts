@@ -19,6 +19,7 @@ import {
   MarketDataSchema,
   OrderBookEntrySchema,
   TradeSchema,
+  PositionSchema,
 } from '../index';
 import samples from './server-samples.json';
 
@@ -62,6 +63,7 @@ describe('snapshot response satisfies the client schemas', () => {
       'candlesticks',
       'marketData',
       'orderBooks',
+      'positions',
       'sequences',
       'trades',
     ]);
@@ -76,6 +78,17 @@ describe('snapshot response satisfies the client schemas', () => {
         if (!result.success) {
           throw new Error(`${symbol}: ${JSON.stringify(result.error.issues)}`);
         }
+      }
+    }
+  });
+
+  it('carries an open position book that parses', () => {
+    const positions = (samples.snapshot as { positions: unknown[] }).positions;
+    expect(positions.length).toBeGreaterThan(0);
+    for (const position of positions) {
+      const result = PositionSchema.safeParse(position);
+      if (!result.success) {
+        throw new Error(JSON.stringify(result.error.issues));
       }
     }
   });

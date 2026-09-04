@@ -15,7 +15,7 @@
 import type { AppDispatch } from './store';
 import { batchUpdateMarketData, updateCandlesticks, setConnected } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
-import { setFocusList } from './slices/positionsSlice';
+import { setFocusList, setPositions } from './slices/positionsSlice';
 import { setTrades } from './slices/tradesSlice';
 import { generateInitialFocusList } from './mockData';
 import { WebSocketClient } from '@/services/websocket';
@@ -58,6 +58,10 @@ export async function startLiveFeed(
   for (const [symbol, data] of Object.entries(snapshot.candlesticks ?? {})) {
     dispatch(updateCandlesticks({ symbol, data }));
   }
+
+  // Open positions. Static until order entry exists, so they ride in on the
+  // snapshot rather than the stream.
+  if (snapshot.positions) dispatch(setPositions(snapshot.positions));
 
   // Backfill the tape so the panel has history the moment it mounts rather
   // than filling in from empty over the next minute.

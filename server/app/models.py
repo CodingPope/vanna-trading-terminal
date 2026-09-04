@@ -60,6 +60,26 @@ class Trade(BaseModel):
     timestamp: float = Field(gt=0)
 
 
+class Position(BaseModel):
+    """
+    An open position.
+
+    Only the durable facts live here: what you hold, how much, and what you
+    paid. `currentPrice`, `pnl` and `pnlPercent` are marks — the client derives
+    them from the live quote, because a mark sent over the wire is stale the
+    moment the next tick lands, and a P&L that lags the price it is drawn next
+    to is worse than no P&L.
+    """
+
+    symbol: str
+    side: Literal["long", "short"]
+    size: float = Field(gt=0)
+    entryPrice: float = Field(gt=0)
+    currentPrice: float = Field(gt=0)
+    pnl: float
+    pnlPercent: float
+
+
 class CandlestickData(BaseModel):
     time: float
     open: float
@@ -152,4 +172,6 @@ class SnapshotResponse(BaseModel):
     #: Recent prints, so the tape has history the moment the panel mounts
     #: rather than filling in from empty over the next minute.
     trades: Dict[str, List[Trade]]
+    #: Open positions. Not per-symbol: a book spans the account.
+    positions: List[Position]
     sequences: Dict[str, int]

@@ -82,6 +82,7 @@ async def snapshot(symbols: str = Query(default="")) -> SnapshotResponse:
         orderBooks={s: engine.order_book(s) for s in known},
         candlesticks={s: engine.candlesticks(s) for s in known},
         trades={s: engine.recent_trades(s) for s in known},
+        positions=engine.positions(),
         sequences={s: engine.sequence(s) for s in known},
     )
 
