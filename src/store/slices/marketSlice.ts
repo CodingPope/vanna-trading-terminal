@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { MarketData, CandlestickData, MarketRegime, StatsForNerds, TradingPhase } from '@/types';
+import type { MarketData, CandlestickData, StatsForNerds, TradingPhase } from '@/types';
 import { SYMBOLS, generateMockMarketData, generateMockCandlesticks } from '../mockData';
 
 // Serializable Record (RTK requires no Maps)
@@ -15,7 +15,6 @@ export interface MarketSliceState {
   candlesticks: Record<string, CandlestickData[]>;
   selectedSymbol: string;
   currentPhase: TradingPhase['id'];
-  marketRegime: MarketRegime;
   stats: StatsForNerds;
   isConnected: boolean;
   /**
@@ -33,7 +32,6 @@ const initialState: MarketSliceState = {
   candlesticks: initCandlesticks,
   selectedSymbol: 'AAPL',
   currentPhase: 'pre-market',
-  marketRegime: { trend: 'bullish', volatility: 'medium', breadth: 'strong', sentiment: 'neutral' },
   stats: { fps: 60, memoryUsage: 0, wsLatency: 0, renderTime: 0, lastUpdate: Date.now() },
   isConnected: false,
   feedSource: 'connecting',
@@ -67,9 +65,6 @@ export const marketSlice = createSlice({
     setPhase(state, action: PayloadAction<TradingPhase['id']>) {
       state.currentPhase = action.payload;
     },
-    setMarketRegime(state, action: PayloadAction<MarketRegime>) {
-      state.marketRegime = action.payload;
-    },
     /**
      * Merges, rather than replaces, so each producer reports only what it can
      * actually measure: the renderer knows fps and frame time, the socket knows
@@ -94,7 +89,6 @@ export const {
   appendCandle,
   setSelectedSymbol,
   setPhase,
-  setMarketRegime,
   setStats,
   setConnected,
   setFeedSource,

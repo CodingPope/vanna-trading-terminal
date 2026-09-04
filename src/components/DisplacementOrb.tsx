@@ -11,7 +11,8 @@ import { OrbitControls, AdaptiveDpr, Preload, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { useUIStore } from '@/store/uiStore';
 import { useAppSelector } from '@/store/hooks';
-import { selectMarketRegime } from '@/store/selectors';
+import { selectMarketPulse } from '@/store/selectors';
+import { normalise, PULSE_SCALE } from '@/lib/marketPulse';
 import { useOrbStore } from '@/store/orbStore';
 
 // ── Shaders (identical to original, ported as tagged-template constants) ─────
@@ -20,7 +21,7 @@ const VERTEX_SHADER = /* glsl */ `
   varying vec3 vNormal;
   varying vec3 vPosition;
   uniform float uTime;
-  uniform float uVolatility;
+  uniform float uDispersion;
   uniform float uBreadth;
   uniform float uPulse;
 
@@ -75,12 +76,25 @@ const VERTEX_SHADER = /* glsl */ `
   void main() {
     vNormal = normalize(normalMatrix * normal);
     vPosition = position;
-    vec3 p = position * 1.1;
+    // Breadth sets spatial frequency: a broad tape gives fine detail all over
+    // the surface, narrow leadership gives a few large lobes.
+    // Kept near 1 deliberately. The third octave samples at ~4x this, and on a
+    // 128-segment sphere anything much higher aliases between vertices — it
+    // reads as noise rather than as detail.
+    float frequency = mix(0.85, 1.6, uBreadth);
+    vec3 p = position * frequency;
     float n1 = snoise(p + uTime * 0.18);
     float n2 = snoise(p * 2.4 + uTime * 0.3);
     float n3 = snoise(p * 4.2 + uTime * 0.42);
     float noise = (n1 * 0.55 + n2 * 0.3 + n3 * 0.15) * 1.35;
-    float displacementAmount = 0.12 + uBreadth * 0.12 + uPulse * 0.06;
+
+    // Dispersion sets amplitude. Displacement from a sphere *is* deviation
+    // from the mean, so the geometry is the statistic rather than a decoration
+    // laid over it: names moving together leave the sphere smooth, names
+    // pulling apart deform it.
+    // Floor near zero so lockstep genuinely looks like a sphere: dispersion
+    // has to be the dominant term or the shape stops carrying the meaning.
+    float displacementAmount = 0.012 + uDispersion * 0.34 + uPulse * 0.012;
     vec3 displaced = position + normal * noise * displacementAmount;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
   }
@@ -91,7 +105,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vPosition;
   uniform float uTime;
   uniform vec3 uColor;
-  uniform float uTrendStrength;
+  uniform float uTrend;
   uniform float uVolatility;
   uniform float uPulse;
 
@@ -114,24 +128,45 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec3 baseC = vec3(0.98, 0.78, 0.42);
     vec3 core = mix(baseA, baseB, band);
     core = mix(core, baseC, fresnel * 0.75);
-    core = mix(core, vec3(1.0, 0.35, 0.28), uVolatility * 0.45);
-    core = hueShift(core, uTrendStrength * 0.1 + uPulse * 0.08);
+    // Direction reads green/red, which a trader parses pre-cognitively. A hue
+    // rotation — what this did before — communicates nothing on its own.
+    vec3 bull = vec3(0.18, 0.92, 0.60);
+    vec3 bear = vec3(1.00, 0.30, 0.32);
+    vec3 directional = mix(bear, bull, clamp(uTrend * 0.5 + 0.5, 0.0, 1.0));
+    core = mix(core, directional, abs(uTrend) * 0.85);
+    // Volatility only intensifies; it no longer decides the colour.
+    core = mix(core, core * 1.35, uVolatility * 0.5);
+    core = hueShift(core, uPulse * 0.04);
     vec3 glow = core * (0.65 + fresnel * 1.25);
-    glow += vec3(0.15, 0.25, 0.45) * fresnel;
+
+    // Rim and bloom both used to be fixed colours — a blue rim plus a white
+    // centre wash — which washed the directional tint straight back out. At
+    // the centre fresnel is 0 and bloom is 1, so the result was core * 0.65
+    // + 0.4 regardless of which way the market was going. Both now carry the
+    // direction, so the whole sphere reads green or red at a glance.
+    vec3 rim = mix(vec3(0.15, 0.25, 0.45), directional * 0.7, abs(uTrend));
+    glow += rim * fresnel;
     float bloom = pow(max(dot(normalize(vNormal), viewDir), 0.0), 8.0);
-    vec3 finalColor = glow + bloom * 0.4;
+    vec3 bloomTint = mix(vec3(1.0), directional, abs(uTrend) * 0.9);
+    vec3 finalColor = glow + bloom * 0.4 * bloomTint;
     gl_FragColor = vec4(finalColor, 0.96);
   }
 `;
 
 // ── OrbMesh — the animated sphere inside a R3F scene ─────────────────────────
 function OrbMesh({
+  dispersion,
   volatility,
-  trendStrength,
+  trend,
   breadth,
 }: {
+  /** 0..1 — how far names deviate from the average move. Drives shape. */
+  dispersion: number;
+  /** 0..1 — how much is happening. Drives how fast the surface churns. */
   volatility: number;
-  trendStrength: number;
+  /** -1..1 — which way the market leans. Drives colour. */
+  trend: number;
+  /** 0..1 — share of names advancing. Drives detail frequency. */
   breadth: number;
 }) {
   // "use no memo" opts this component out of the React Compiler.
@@ -147,29 +182,32 @@ function OrbMesh({
   const uniformsRef = useRef({
     uTime: { value: 0 },
     uColor: { value: new THREE.Color(0x6366f1) },
-    uTrendStrength: { value: trendStrength },
+    uTrend: { value: trend },
+    uDispersion: { value: dispersion },
     uVolatility: { value: volatility },
     uBreadth: { value: breadth },
     uPulse: { value: 0 },
   });
 
-  // Sync market-driven values when props change
-  useEffect(() => {
-    uniformsRef.current.uVolatility.value = volatility;
-    uniformsRef.current.uTrendStrength.value = trendStrength;
-    uniformsRef.current.uBreadth.value = breadth;
-    if (matRef.current) {
-      matRef.current.uniforms.uVolatility.value = volatility;
-      matRef.current.uniforms.uTrendStrength.value = trendStrength;
-      matRef.current.uniforms.uBreadth.value = breadth;
-    }
-  }, [volatility, trendStrength, breadth]);
 
   useFrame((_, delta) => {
     if (!matRef.current || !meshRef.current) return;
-    matRef.current.uniforms.uTime.value += delta * 0.7;
-    matRef.current.uniforms.uPulse.value =
-      Math.sin(matRef.current.uniforms.uTime.value * 0.8) * 0.5 + 0.5;
+    // Market values are written here rather than in an effect. useFrame reads
+    // current props through the closure every frame, so there is no question
+    // of whether a ref was attached or an effect had run — which is what left
+    // uTrend sitting at its initial value while the market moved.
+    const u = matRef.current.uniforms;
+    u.uDispersion.value = dispersion;
+    u.uVolatility.value = volatility;
+    u.uTrend.value = trend;
+    u.uBreadth.value = breadth;
+
+    // Volatility drives the clock. This is the channel a person notices first
+    // and nothing was using it — the surface churned at a fixed rate whatever
+    // the market did. A quiet tape now barely moves; a violent one boils.
+    const churn = 0.25 + volatility * 1.9;
+    u.uTime.value += delta * churn;
+    u.uPulse.value = Math.sin(u.uTime.value * 0.8) * 0.5 + 0.5;
 
     if (autoRotate) {
       meshRef.current.rotation.x += delta * 0.18;
@@ -202,15 +240,18 @@ interface DisplacementOrbProps {
 
 export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbProps) {
   const enterDashboard = useUIStore(s => s.enterDashboard);
-  const marketRegime = useAppSelector(selectMarketRegime);
+  const pulse = useAppSelector(selectMarketPulse);
 
-  const { volatility, trendStrength, breadth } = useMemo(() => {
-    return {
-      volatility: marketRegime.volatility === 'low' ? 0.2 : marketRegime.volatility === 'high' ? 0.95 : 0.5,
-      trendStrength: marketRegime.trend === 'neutral' ? 0.3 : 0.8,
-      breadth: marketRegime.breadth === 'strong' ? 0.85 : marketRegime.breadth === 'weak' ? 0.25 : 0.5,
-    };
-  }, [marketRegime]);
+  // Continuous, not bucketed. This previously read the three-value regime enum
+  // and mapped it to a handful of constants, so the orb had 27 possible
+  // appearances in total and looked frozen even as prices moved.
+  const { dispersion, volatility, trend, breadth } = useMemo(() => ({
+    dispersion: normalise(pulse.dispersion, PULSE_SCALE.dispersion),
+    volatility: normalise(pulse.volatility, PULSE_SCALE.volatility),
+    // Signed: the shader needs to know direction, not just magnitude.
+    trend: Math.sign(pulse.trend) * normalise(pulse.trend, PULSE_SCALE.trend),
+    breadth: pulse.breadth,
+  }), [pulse]);
 
   return (
     <div
@@ -239,7 +280,12 @@ export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbP
         <AdaptiveDpr pixelated />
         <Preload all />
 
-        <OrbMesh volatility={volatility} trendStrength={trendStrength} breadth={breadth} />
+        <OrbMesh
+          dispersion={dispersion}
+          volatility={volatility}
+          trend={trend}
+          breadth={breadth}
+        />
 
         <OrbitControls
           enableZoom={false}
@@ -265,7 +311,7 @@ export function DisplacementOrb({ size = 400, className = '' }: DisplacementOrbP
 export function OrbIndicator({ size = 40 }: { size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
-  const marketRegime = useAppSelector(selectMarketRegime);
+  const pulse = useAppSelector(selectMarketPulse);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -283,8 +329,9 @@ export function OrbIndicator({ size = 40 }: { size?: number }) {
       uniforms: {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(0x6366f1) },
-        uTrendStrength: { value: 0.5 },
-        uVolatility: { value: 0.5 },
+        uTrend: { value: 0 },
+        uDispersion: { value: 0 },
+        uVolatility: { value: 0 },
         uBreadth: { value: 0.5 },
         uPulse: { value: 0 },
       },
@@ -313,11 +360,17 @@ export function OrbIndicator({ size = 40 }: { size?: number }) {
     };
   }, [size]);
 
+  // Same four readings as the large orb. This is the one that actually earns
+  // the "peripheral awareness" claim — it sits in the header while you work,
+  // where the landing page orb is a splash screen you see once.
   useEffect(() => {
     if (!materialRef.current) return;
-    materialRef.current.uniforms.uVolatility.value =
-      marketRegime.volatility === 'low' ? 0.2 : marketRegime.volatility === 'high' ? 0.95 : 0.5;
-  }, [marketRegime]);
+    const u = materialRef.current.uniforms;
+    u.uDispersion.value = normalise(pulse.dispersion, PULSE_SCALE.dispersion);
+    u.uVolatility.value = normalise(pulse.volatility, PULSE_SCALE.volatility);
+    u.uTrend.value = Math.sign(pulse.trend) * normalise(pulse.trend, PULSE_SCALE.trend);
+    u.uBreadth.value = pulse.breadth;
+  }, [pulse]);
 
   return (
     <canvas

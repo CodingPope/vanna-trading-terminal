@@ -1,13 +1,34 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import type { OrderBookEntry, Trade } from '@/types';
+import { computeMarketPulse, regimeFromPulse } from '@/lib/marketPulse';
 
 // ── Market ──────────────────────────────────────────────────────────────────
 
 export const selectAllMarketEntities = (state: RootState) => state.market.entities;
 export const selectSelectedSymbol = (state: RootState) => state.market.selectedSymbol;
 export const selectCurrentPhase = (state: RootState) => state.market.currentPhase;
-export const selectMarketRegime = (state: RootState) => state.market.marketRegime;
+/**
+ * Live market state, computed from every quote on each change.
+ *
+ * `marketRegime` used to be a hardcoded object in the store that nothing ever
+ * dispatched, so the header read "REGIME BULLISH" permanently and the orb's
+ * shader uniforms were frozen constants. Deriving it means it cannot go stale
+ * and there is no dispatch to forget.
+ *
+ * Scoped to the whole market. Making this the focus list instead is a matter
+ * of filtering the entity list before it reaches computeMarketPulse.
+ */
+export const selectMarketPulse = createSelector(
+  [selectAllMarketEntities],
+  (entities) => computeMarketPulse(Object.values(entities))
+);
+
+/** Text labels for the header and morning brief, from the same numbers. */
+export const selectMarketRegime = createSelector(
+  [selectMarketPulse],
+  (pulse) => regimeFromPulse(pulse)
+);
 export const selectStats = (state: RootState) => state.market.stats;
 export const selectIsConnected = (state: RootState) => state.market.isConnected;
 export const selectFeedSource = (state: RootState) => state.market.feedSource;

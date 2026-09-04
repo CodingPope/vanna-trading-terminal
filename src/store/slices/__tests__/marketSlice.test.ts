@@ -5,7 +5,6 @@ import marketReducer, {
   appendCandle,
   setSelectedSymbol,
   setPhase,
-  setMarketRegime,
   setConnected,
 } from '../marketSlice';
 import type { MarketSliceState } from '../marketSlice';
@@ -95,14 +94,6 @@ describe('marketSlice', () => {
     it('updates currentPhase', () => {
       const state = marketReducer(undefined, setPhase('open'));
       expect(state.currentPhase).toBe('open');
-    });
-  });
-
-  describe('setMarketRegime', () => {
-    it('replaces the full regime object', () => {
-      const regime = { trend: 'bearish' as const, volatility: 'high' as const, breadth: 'weak' as const, sentiment: 'fear' as const };
-      const state = marketReducer(undefined, setMarketRegime(regime));
-      expect(state.marketRegime).toEqual(regime);
     });
   });
 
