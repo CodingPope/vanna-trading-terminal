@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { TRADING_PHASES } from '@/store';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { useUIStore } from '@/store/uiStore';
-import { selectCurrentPhase, selectMarketRegime } from '@/store/selectors';
+import { NotificationCenter } from './NotificationCenter';
+import { selectCurrentPhase, selectMarketRegime, selectStats } from '@/store/selectors';
 import { OrbIndicator } from './DisplacementOrb';
 import { 
   Search, 
@@ -18,11 +19,15 @@ export function Header() {
   const marketRegime = useAppSelector(selectMarketRegime);
   const { setPhase } = useMarketActions();
   const toggleSettings = useUIStore(s => s.toggleSettings);
-  const addNotification = useUIStore(s => s.addNotification);
+  const toggleCommandPalette = useUIStore(s => s.toggleCommandPalette);
+  const goToLanding = useUIStore(s => s.goToLanding);
   const notificationCount = useUIStore(s => s.notifications.length);
+  const [showNotifications, setShowNotifications] = useState(false);
+  // Store clock rather than Date.now(): reading the wall clock during render
+  // is impure, and this already ticks once a second.
+  const lastUpdate = useAppSelector(selectStats).lastUpdate;
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [searchValue, setSearchValue] = useState('');
   const phaseMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +52,7 @@ export function Header() {
       {/* Left: Logo */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => {}}
+          onClick={goToLanding}
           className="flex items-center gap-2 group"
           aria-label="Return to landing page"
         >
@@ -115,17 +120,22 @@ export function Header() {
       <div className="flex-1 max-w-xl mx-4 hidden md:block">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vanna-text-secondary" />
-          <input
-            type="text"
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search symbol, sector, or setup..."
-            className="w-full bg-vanna-surface-light/50 border border-white/5 rounded-md 
-                       pl-10 pr-20 py-2 text-sm text-vanna-text placeholder:text-vanna-text-secondary/50
-                       focus:outline-none focus:border-vanna-cyan/30 focus:ring-1 focus:ring-vanna-cyan/20
-                       transition-all"
+          {/* Opens the command palette rather than being a second, half-built
+              search. The palette already does symbol lookup and is tested, and
+              the shortcut badge on the right has been advertising it all along
+              — this input just swallowed keystrokes and did nothing with them. */}
+          <button
+            type="button"
+            onClick={toggleCommandPalette}
             aria-label="Search symbols"
-          />
+            aria-keyshortcuts="Meta+K Control+K"
+            className="w-full text-left bg-vanna-surface-light/50 border border-white/5 rounded-md
+                       pl-10 pr-20 py-2 text-sm text-vanna-text-secondary/50
+                       hover:border-vanna-cyan/30 focus:outline-none focus:border-vanna-cyan/30
+                       focus:ring-1 focus:ring-vanna-cyan/20 transition-all"
+          >
+            Search symbol, sector, or setup...
+          </button>
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <kbd className="px-1.5 py-0.5 text-[10px] bg-vanna-surface border border-white/10 rounded text-vanna-text-secondary">
               ⌘
@@ -155,17 +165,12 @@ export function Header() {
         </div>
 
         {/* Notifications */}
+        <div className="relative">
         <button
-          onClick={() =>
-            addNotification({
-              type: 'info',
-              message: notificationCount
-                ? `${notificationCount} active alert${notificationCount > 1 ? 's' : ''}`
-                : 'No new alerts',
-            })
-          }
+          onClick={() => setShowNotifications(v => !v)}
           className="relative p-2 rounded-md hover:bg-white/5 transition-colors"
           aria-label="Notifications"
+          aria-expanded={showNotifications}
         >
           <Bell className="w-4 h-4 text-vanna-text-secondary" />
           {/* Was always on, so it permanently implied unread items. */}
@@ -173,6 +178,12 @@ export function Header() {
             <span className="absolute top-1 right-1 w-2 h-2 bg-vanna-red rounded-full" />
           )}
         </button>
+        <NotificationCenter
+          open={showNotifications}
+          onClose={() => setShowNotifications(false)}
+          now={lastUpdate}
+        />
+        </div>
 
         {/* Settings */}
         <button

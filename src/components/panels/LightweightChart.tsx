@@ -5,6 +5,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import {
   createChart,
+  AreaSeries,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -20,6 +21,12 @@ import type { CandlestickData, MarketData } from '@/types';
 interface LightweightChartProps {
   candlesticks: CandlestickData[];
   marketData?: MarketData;
+  /**
+   * Which price series to show. This component previously had no such prop, so
+   * the candlestick/line/area buttons changed state nothing read — and since
+   * this is the default view, they appeared to do nothing at all.
+   */
+  chartType?: 'candlestick' | 'line' | 'area';
   showVolume?: boolean;
   anchorTs?: number | null;
   onAnchor?: (ts: number) => void;
@@ -45,6 +52,7 @@ function computeVWAP(candles: CandlestickData[], fromIndex = 0): (number | null)
 export function LightweightChart({
   candlesticks,
   marketData,
+  chartType = 'candlestick',
   showVolume = true,
   anchorTs,
   onAnchor,
@@ -52,6 +60,8 @@ export function LightweightChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const areaSeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const avwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -99,6 +109,25 @@ export function LightweightChart({
       wickDownColor: '#ef4444',
     });
 
+    // All three price series exist for the life of the chart and visibility is
+    // toggled. Recreating a series on every switch would drop the data and
+    // reset the visible range under the user.
+    const lineSeries = chart.addSeries(LineSeries, {
+      color: '#00ffcc',
+      lineWidth: 2,
+      priceLineVisible: false,
+      visible: false,
+    });
+
+    const areaSeries = chart.addSeries(AreaSeries, {
+      lineColor: '#00ffcc',
+      topColor: 'rgba(0,255,204,0.25)',
+      bottomColor: 'rgba(0,255,204,0.02)',
+      lineWidth: 2,
+      priceLineVisible: false,
+      visible: false,
+    });
+
     const volSeries = chart.addSeries(HistogramSeries, {
       color: 'rgba(96,96,128,0.3)',
       priceFormat: { type: 'volume' },
@@ -125,6 +154,8 @@ export function LightweightChart({
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
+    lineSeriesRef.current = lineSeries;
+    areaSeriesRef.current = areaSeries;
     volumeSeriesRef.current = volSeries;
     vwapSeriesRef.current = vwapLine;
     avwapSeriesRef.current = avwapLine;
@@ -181,6 +212,12 @@ export function LightweightChart({
     candleSeriesRef.current.setData(lwData);
     volumeSeriesRef.current.setData(showVolume ? volData : []);
 
+    // Line and area plot the close. Kept in sync so switching type is an
+    // instant visibility flip rather than a reload.
+    const closes = sorted.map(c => ({ time: msToSec(c.time), value: c.close }));
+    lineSeriesRef.current?.setData(closes);
+    areaSeriesRef.current?.setData(closes);
+
     // VWAP
     const vwapValues = computeVWAP(sorted);
     const vwapData: LineData[] = sorted
@@ -201,6 +238,13 @@ export function LightweightChart({
     }
   }, [candlesticks, showVolume, anchorTs]);
 
+  // Show whichever price series the chart type asks for.
+  useEffect(() => {
+    candleSeriesRef.current?.applyOptions({ visible: chartType === 'candlestick' });
+    lineSeriesRef.current?.applyOptions({ visible: chartType === 'line' });
+    areaSeriesRef.current?.applyOptions({ visible: chartType === 'area' });
+  }, [chartType]);
+
   // Real-time tick update — rAF throttled to ~60fps
   const scheduleUpdate = useCallback((data: CandlestickData) => {
     pendingUpdateRef.current = data;
@@ -208,13 +252,18 @@ export function LightweightChart({
     rafRef.current = requestAnimationFrame(() => {
       const pending = pendingUpdateRef.current;
       if (pending && candleSeriesRef.current) {
+        const time = msToSec(pending.time);
         candleSeriesRef.current.update({
-          time: msToSec(pending.time),
+          time,
           open: pending.open,
           high: pending.high,
           low: pending.low,
           close: pending.close,
         });
+        // Otherwise line and area freeze at the last full bar while the
+        // candlestick view keeps ticking.
+        lineSeriesRef.current?.update({ time, value: pending.close });
+        areaSeriesRef.current?.update({ time, value: pending.close });
       }
       pendingUpdateRef.current = null;
       rafRef.current = null;

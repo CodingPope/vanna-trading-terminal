@@ -17,7 +17,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,36 +90,89 @@ class Connection:
     def __init__(self, ws: WebSocket) -> None:
         self.ws = ws
         self.symbols: Set[str] = set(engine.symbols)
-        self.speed: float = 1.0
+        # Bounded: a client that cannot keep up should lose messages rather
+        # than grow the server's memory without limit. The client detects the
+        # resulting sequence gap and re-snapshots.
+        self.outbox: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=2000)
 
     async def send(self, payload: object) -> None:
         await self.ws.send_text(json.dumps(payload))
 
+    def offer(self, payload: dict) -> None:
+        try:
+            self.outbox.put_nowait(payload)
+        except asyncio.QueueFull:
+            pass
 
-async def _stream(conn: Connection) -> None:
-    """Advance the session and push ticks until the socket goes away."""
-    while True:
-        await asyncio.sleep(BASE_TICK_INTERVAL / max(conn.speed, 0.01))
 
-        for symbol in list(conn.symbols):
-            if symbol not in engine.states:
+class Hub:
+    """
+    Owns the single session clock and fans its output out to every client.
+
+    The engine used to be advanced by each connection's own loop. Since it is a
+    process-wide singleton, that meant N connected clients advanced the session
+    N times per interval and each incremented the shared per-symbol sequence —
+    so every client saw only a fraction of the sequence numbers, read the rest
+    as gaps, and re-snapshotted continuously while its book decayed. Two browser
+    tabs broke each other.
+
+    There is one market. It ticks once, and everybody watching sees the same
+    stream — which is also the only arrangement in which a sequence number
+    means anything.
+    """
+
+    def __init__(self) -> None:
+        self.clients: Set[Connection] = set()
+        self._task: Optional[asyncio.Task] = None
+        self.speed: float = 1.0
+
+    def add(self, conn: Connection) -> None:
+        self.clients.add(conn)
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._run())
+
+    def remove(self, conn: Connection) -> None:
+        self.clients.discard(conn)
+
+    def _broadcast(self, payload: dict, symbol: str) -> None:
+        for client in self.clients:
+            if symbol in client.symbols:
+                client.offer(payload)
+
+    async def _run(self) -> None:
+        while True:
+            await asyncio.sleep(BASE_TICK_INTERVAL / max(self.speed, 0.01))
+            if not self.clients:
                 continue
-            engine.advance(symbol)
 
-            await conn.send(
-                MarketDataMessage(data=engine.market_data(symbol)).model_dump()
-            )
-
-            # Book updates are far less frequent than prints in a real feed.
-            if engine.rng.random() < 0.25:
-                changed = engine.next_book_delta(symbol)
-                await conn.send(
-                    OrderBookDeltaMessage(
-                        symbol=symbol,
-                        sequence=engine.sequence(symbol),
-                        data=changed,
-                    ).model_dump()
+            for symbol in engine.symbols:
+                engine.advance(symbol)
+                self._broadcast(
+                    MarketDataMessage(data=engine.market_data(symbol)).model_dump(),
+                    symbol,
                 )
+
+                # Book updates are far less frequent than prints in a real feed.
+                if engine.rng.random() < 0.25:
+                    changed = engine.next_book_delta(symbol)
+                    self._broadcast(
+                        OrderBookDeltaMessage(
+                            symbol=symbol,
+                            sequence=engine.sequence(symbol),
+                            data=changed,
+                        ).model_dump(),
+                        symbol,
+                    )
+
+
+hub = Hub()
+
+
+async def _drain(conn: Connection) -> None:
+    """Push whatever the hub has queued for this client."""
+    while True:
+        payload = await conn.outbox.get()
+        await conn.send(payload)
 
 
 async def _send_snapshot(conn: Connection, symbol: str) -> None:
@@ -143,7 +196,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
     for symbol in conn.symbols:
         await _send_snapshot(conn, symbol)
 
-    pump = asyncio.create_task(_stream(conn))
+    hub.add(conn)
+    pump = asyncio.create_task(_drain(conn))
 
     try:
         while True:
@@ -170,6 +224,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         log.info("client disconnected")
     finally:
+        hub.remove(conn)
         pump.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await pump

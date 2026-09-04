@@ -416,6 +416,7 @@ export function ChartPanel({ symbol: propSymbol }: ChartPanelProps) {
           <LightweightChart
             candlesticks={candlesticks}
             marketData={marketData}
+            chartType={chartType}
             showVolume={showVolume}
             anchorTs={anchorTs}
             onAnchor={setAnchorTs}
