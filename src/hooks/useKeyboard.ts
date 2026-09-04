@@ -65,8 +65,13 @@ export function useKeyboard(): void {
     { preventDefault: true },
   );
 
-  // ? — keyboard shortcuts reference modal
-  useHotkeys('shift+/', () => toggleKeyboardShortcuts());
+  // ? — keyboard shortcuts reference modal.
+  //
+  // Must be 'shift+slash', not 'shift+/'. A browser reports `key === '?'` for
+  // that chord, and react-hotkeys-hook matches it by physical key name — so
+  // 'shift+/' matched nothing and the shortcut was dead in the browser while a
+  // synthetic KeyboardEvent carrying key '/' kept the unit test green.
+  useHotkeys('shift+slash', () => toggleKeyboardShortcuts());
 
   // Cmd/Ctrl+K — command palette
   useHotkeys('mod+k', (e) => { e.preventDefault(); toggleCommandPalette(); }, { preventDefault: true });
