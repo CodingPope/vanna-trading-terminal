@@ -13,3 +13,8 @@ coverage/
 server/.venv/
 __pycache__/
 *.pyc
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

@@ -25,11 +25,15 @@ export const orderBookSlice = createSlice({
       action.payload.delta.forEach(entry => {
         const idx = book.findIndex(e => e.price === entry.price && e.side === entry.side);
         if (entry.size === 0) {
+          // size 0 means the level is gone, not a level holding nothing.
           if (idx !== -1) book.splice(idx, 1);
         } else if (idx !== -1) {
-          book[idx] = entry;
+          // Copy rather than adopt the caller's object: `total` is recomputed
+          // below, so storing the reference would mutate a value the caller
+          // still owns — and throws outright if it happens to be frozen.
+          book[idx] = { ...entry };
         } else {
-          book.push(entry);
+          book.push({ ...entry });
         }
       });
 

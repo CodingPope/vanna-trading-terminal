@@ -32,7 +32,10 @@ export function Notifications() {
   };
 
   return (
-    <div className="fixed top-16 right-4 z-[90] space-y-2">
+    /* Bottom right, above the stats footer. Top right put toasts directly over
+       the workspace controls, so the welcome toast covered Reset/Save/Delete
+       for its whole five-second life. */
+    <div className="fixed bottom-10 right-4 z-[90] space-y-2">
       {notifications.map((notification) => (
         <div
           key={notification.id}
