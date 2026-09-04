@@ -18,6 +18,7 @@ import {
   WsMessageSchema,
   MarketDataSchema,
   OrderBookEntrySchema,
+  TradeSchema,
 } from '../index';
 import samples from './server-samples.json';
 
@@ -31,6 +32,7 @@ describe('server messages satisfy the client schemas', () => {
       'order_book_delta',
       'order_book_snapshot',
       'pong',
+      'trade',
     ]);
   });
 
@@ -55,13 +57,27 @@ describe('snapshot response satisfies the client schemas', () => {
     sequences: Record<string, number>;
   };
 
-  it('carries the four keys SnapshotService expects', () => {
+  it('carries the keys SnapshotService expects', () => {
     expect(Object.keys(snapshot).sort()).toEqual([
       'candlesticks',
       'marketData',
       'orderBooks',
       'sequences',
+      'trades',
     ]);
+  });
+
+  it('backfills the tape so the panel is not empty on first paint', () => {
+    const trades = (samples.snapshot as { trades: Record<string, unknown[]> }).trades;
+    for (const [symbol, prints] of Object.entries(trades)) {
+      expect(prints.length, `${symbol} tape`).toBeGreaterThan(0);
+      for (const print of prints) {
+        const result = TradeSchema.safeParse(print);
+        if (!result.success) {
+          throw new Error(`${symbol}: ${JSON.stringify(result.error.issues)}`);
+        }
+      }
+    }
   });
 
   it('every quote parses', () => {

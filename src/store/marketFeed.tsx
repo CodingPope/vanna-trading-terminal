@@ -21,6 +21,7 @@ import {
   setFeedSource,
 } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
+import { addTrades } from './slices/tradesSlice';
 import { setFocusList } from './slices/positionsSlice';
 import { removePriceAlert } from './slices/panelsSlice';
 import { useAppSelector } from './hooks';
@@ -29,7 +30,7 @@ import { selectAlerts } from './selectors';
 import { startLiveFeed } from './liveFeed';
 import type { LiveFeedHandle } from './liveFeed';
 import type { MarketData } from '@/types';
-import { SYMBOLS, generateMockOrderBook, generateInitialFocusList, tickMagnitude, spreadFor } from './mockData';
+import { SYMBOLS, generateMockOrderBook, generateInitialFocusList, generateMockTrades, tickMagnitude, spreadFor } from './mockData';
 
 const TICK_INTERVAL_MS = 100;
 
@@ -62,6 +63,7 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>, enabled: bo
       if (now - lastTickRef.current > TICK_INTERVAL_MS) {
         const entities = entitiesNow();
         const updates: MarketData[] = [];
+        const prints: Array<{ symbol: string; trades: ReturnType<typeof generateMockTrades> }> = [];
 
         SYMBOLS.forEach(symbol => {
           const current = entities[symbol];
@@ -83,9 +85,13 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>, enabled: bo
             askSize: Math.floor(Math.random() * 1000) + 100,
             timestamp: now,
           });
+
+          const trades = generateMockTrades(symbol, newPrice, current.price, now);
+          if (trades.length) prints.push({ symbol, trades });
         });
 
         if (updates.length) dispatch(batchUpdateMarketData(updates));
+        for (const p of prints) dispatch(addTrades({ symbol: p.symbol, trades: p.trades }));
         lastTickRef.current = now;
       }
 

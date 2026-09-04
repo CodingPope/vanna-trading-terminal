@@ -1,6 +1,6 @@
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from './store';
-import type { OrderBookEntry } from '@/types';
+import type { OrderBookEntry, Trade } from '@/types';
 
 // ── Market ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +64,33 @@ export const selectBids = createSelector(
 export const selectAsks = createSelector(
   [selectOrderBook],
   (book): OrderBookEntry[] => book.filter(e => e.side === 'ask')
+);
+
+// ── Trades ───────────────────────────────────────────────────────────────────
+
+export const selectAllTrades = (state: RootState) => state.trades.bySymbol;
+
+const EMPTY_TRADES: Trade[] = [];
+
+/** Tape for a symbol. Stable empty array so an unknown symbol does not
+ *  produce a new reference on every render. */
+export const selectTrades = createSelector(
+  [selectAllTrades, (_: RootState, symbol: string) => symbol],
+  (bySymbol, symbol) => bySymbol[symbol] ?? EMPTY_TRADES
+);
+
+/** Buy/sell volume over the most recent prints — the tape bias meter. */
+export const selectTapeBias = createSelector(
+  [selectTrades],
+  (trades) => {
+    let buyVol = 0;
+    let sellVol = 0;
+    for (const t of trades.slice(0, 60)) {
+      if (t.side === 'buy') buyVol += t.size;
+      else sellVol += t.size;
+    }
+    return { buyVol, sellVol };
+  }
 );
 
 // ── Positions ────────────────────────────────────────────────────────────────

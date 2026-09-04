@@ -30,6 +30,16 @@ export const OrderBookEntrySchema = z.object({
   side: z.enum(['bid', 'ask']),
 });
 
+// ── Trades (time & sales) ─────────────────────────────────────────────────────
+export const TradeSchema = z.object({
+  id: z.string().min(1),
+  symbol: z.string().min(1).max(10),
+  price: z.number().positive(),
+  size: z.number().positive(),
+  side: z.enum(['buy', 'sell']),
+  timestamp: z.number().positive(),
+});
+
 // ── ANA Analysis ──────────────────────────────────────────────────────────────
 export const AnaVerdictSchema = z.enum(['VALID', 'NO_TRADE', 'STANDBY']);
 
@@ -74,6 +84,7 @@ export const WsMessageSchema = z.discriminatedUnion('type', [
   z.object({ ...WsBase, type: z.literal('order_book_snapshot'), symbol: z.string(), sequence: z.number(), data: z.array(OrderBookEntrySchema) }),
   z.object({ ...WsBase, type: z.literal('order_book_delta'), symbol: z.string(), sequence: z.number(), data: z.array(OrderBookEntrySchema) }),
   z.object({ ...WsBase, type: z.literal('position_update'), data: PositionSchema }),
+  z.object({ ...WsBase, type: z.literal('trade'), symbol: z.string(), data: z.array(TradeSchema) }),
   z.object({ ...WsBase, type: z.literal('ping'), data: z.null() }),
   z.object({ ...WsBase, type: z.literal('pong'), data: z.null() }),
   z.object({ ...WsBase, type: z.literal('subscribe'), data: z.null() }),

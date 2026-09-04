@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .models import CandlestickData, MarketData, OrderBookEntry, Side
+from .models import CandlestickData, MarketData, OrderBookEntry, Side, Trade
 
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "session.json"
 
@@ -145,6 +145,8 @@ class SymbolState:
     tick_index: int = 0
     path: List[float] = field(default_factory=list)
     sequence: int = 0
+    last_price: float = 0.0
+    trade_seq: int = 0
     anchor: float = 0.0
     tick: float = 0.01
     bids: Dict[float, float] = field(default_factory=dict)
@@ -220,6 +222,7 @@ class ReplayEngine:
         state.cumulative_volume = bars[0].volume
         self._seed_book(state)
         state.sequence = 1
+        state.last_price = state.price
         return state
 
     # ── order book ───────────────────────────────────────────────────────────
@@ -311,6 +314,68 @@ class ReplayEngine:
             bidSize=float(self.rng.randrange(100, 1200)),
             askSize=float(self.rng.randrange(100, 1200)),
         )
+
+    # ── tape ─────────────────────────────────────────────────────────────────
+
+    #: Lot sizes a print lands on. Real tape clusters on round lots rather than
+    #: being uniformly distributed, and the odd block stands out because of it.
+    LOT_SIZES = (25, 50, 75, 100, 100, 100, 200, 300, 500, 1000)
+
+    def next_trades(self, symbol: str) -> List[Trade]:
+        """
+        Prints for the tick just advanced.
+
+        Aggressor side follows the direction price moved: an up-tick means a
+        buyer crossed the spread, a down-tick a seller. That is what makes the
+        panel's tape bias meter mean something — it measures who was impatient,
+        not which way the price went.
+
+        A flat tick still prints, because a market can trade without moving.
+        """
+        state = self.states[symbol]
+        price = state.price
+        delta = price - state.last_price
+        state.last_price = price
+
+        # Bigger moves print more. A quiet tick may print nothing at all.
+        magnitude = abs(delta) / max(price, 1e-9)
+        count = 1 + int(min(3, magnitude * 4000))
+        if magnitude == 0 and self.rng.random() < 0.4:
+            count = 0
+
+        spread = spread_for(price)
+        trades: List[Trade] = []
+        for _ in range(count):
+            state.trade_seq += 1
+            if delta > 0:
+                side = "buy"
+            elif delta < 0:
+                side = "sell"
+            else:
+                side = "buy" if self.rng.random() < 0.5 else "sell"
+            # Buys lift the offer, sells hit the bid.
+            fill = price + spread / 2 if side == "buy" else price - spread / 2
+            trades.append(Trade(
+                id=f"{symbol}-{state.trade_seq}",
+                symbol=symbol,
+                price=round(fill, 4),
+                size=float(self.rng.choice(self.LOT_SIZES)),
+                side=side,
+                timestamp=state.bars[state.bar_index].time + state.tick_index,
+            ))
+        return trades
+
+    def recent_trades(self, symbol: str, count: int = 40) -> List[Trade]:
+        """A short backfill so the tape is not empty on first paint."""
+        out: List[Trade] = []
+        while len(out) < count:
+            batch = self.next_trades(symbol)
+            if not batch:
+                self.advance(symbol)
+                continue
+            out.extend(batch)
+            self.advance(symbol)
+        return out[:count]
 
     def order_book(self, symbol: str) -> List[OrderBookEntry]:
         return self._entries(self.states[symbol])
