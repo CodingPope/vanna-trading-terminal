@@ -2,14 +2,16 @@ import type { AppDispatch } from '@/store/store';
 import { setConnected, setStats } from '@/store/slices/marketSlice';
 import { MarketDataHandler } from './handlers/marketDataHandler';
 import { OrderBookHandler } from './handlers/orderBookHandler';
+import { TradeHandler } from './handlers/tradeHandler';
 import { BackpressureQueue } from './buffers';
 import type { MarketData } from '@/types';
-import type { OrderBookEntry } from '@/types';
+import type { OrderBookEntry, Trade } from '@/types';
 
 export type WsMessageType =
   | 'market_data'
   | 'order_book_snapshot'
   | 'order_book_delta'
+  | 'trade'
   | 'position_update'
   | 'ping'
   | 'pong'
@@ -66,6 +68,7 @@ export class WebSocketClient {
 
   private readonly marketDataHandler: MarketDataHandler;
   private readonly orderBookHandler: OrderBookHandler;
+  private readonly tradeHandler: TradeHandler;
   private readonly messageQueue: BackpressureQueue<WsMessage>;
   private readonly onMessage?: (msg: WsMessage) => void;
 
@@ -77,6 +80,7 @@ export class WebSocketClient {
     this.onMessage = options.onMessage;
     this.marketDataHandler = new MarketDataHandler(this.dispatch);
     this.orderBookHandler = new OrderBookHandler(this.dispatch);
+    this.tradeHandler = new TradeHandler(this.dispatch);
     this.messageQueue = new BackpressureQueue<WsMessage>(options.queueCapacity ?? DEFAULT_QUEUE_CAPACITY);
   }
 
@@ -159,6 +163,7 @@ export class WebSocketClient {
     const priority =
       msg.type === 'order_book_snapshot' ||
       msg.type === 'order_book_delta' ||
+      msg.type === 'trade' ||
       msg.type === 'position_update'
         ? 'high'
         : 'low';
@@ -178,6 +183,7 @@ export class WebSocketClient {
       // Already inside a frame — push the deduped batch out now rather than
       // waiting for the handler's own frame.
       this.marketDataHandler.flush();
+      this.tradeHandler.flush();
     });
   }
 
@@ -200,6 +206,12 @@ export class WebSocketClient {
             // Sequence gap — request a fresh snapshot for this symbol
             this.send({ type: 'subscribe', symbol: msg.symbol, requestSnapshot: true, data: null });
           }
+        }
+        break;
+
+      case 'trade':
+        if (msg.symbol && Array.isArray(msg.data)) {
+          this.tradeHandler.handle(msg.symbol, msg.data as Trade[]);
         }
         break;
 
@@ -256,6 +268,7 @@ export class WebSocketClient {
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     if (this.drainHandle !== null) { cancelAnimationFrame(this.drainHandle); this.drainHandle = null; }
     this.marketDataHandler.destroy();
+    this.tradeHandler.destroy();
     this.ws?.close();
     this.ws = null;
   }

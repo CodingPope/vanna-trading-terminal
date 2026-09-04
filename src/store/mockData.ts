@@ -1,4 +1,4 @@
-import type { MarketData, CandlestickData, OrderBookEntry, AnaAnalysis, FocusItem } from '@/types';
+import type { MarketData, CandlestickData, OrderBookEntry, AnaAnalysis, FocusItem, Trade } from '@/types';
 
 export const SYMBOLS = [
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'AMD', 'CRM',
@@ -135,6 +135,47 @@ export const generateMockOrderBook = (price: number): OrderBookEntry[] => {
   });
 
   return entries.sort((a, b) => b.price - a.price);
+};
+
+const LOT_SIZES = [25, 50, 75, 100, 100, 100, 200, 300, 500, 1000];
+
+let tradeSeq = 0;
+
+/**
+ * Prints for a simulated tick.
+ *
+ * Mirrors the server's tape so both feeds fill the same store slice and the
+ * panel stays presentational. Aggressor side follows the price move: an
+ * up-tick means a buyer crossed the spread.
+ */
+export const generateMockTrades = (
+  symbol: string,
+  price: number,
+  previousPrice: number,
+  timestamp: number,
+): Trade[] => {
+  const delta = price - previousPrice;
+  const magnitude = Math.abs(delta) / Math.max(price, 1e-9);
+  let count = 1 + Math.min(3, Math.floor(magnitude * 4000));
+  if (magnitude === 0 && Math.random() < 0.4) count = 0;
+
+  const spread = spreadFor(price);
+  const trades: Trade[] = [];
+  for (let i = 0; i < count; i++) {
+    tradeSeq += 1;
+    const side: Trade['side'] =
+      delta > 0 ? 'buy' : delta < 0 ? 'sell' : Math.random() < 0.5 ? 'buy' : 'sell';
+    trades.push({
+      id: `${symbol}-sim-${tradeSeq}`,
+      symbol,
+      // Buys lift the offer, sells hit the bid.
+      price: Number((side === 'buy' ? price + spread / 2 : price - spread / 2).toFixed(4)),
+      size: LOT_SIZES[Math.floor(Math.random() * LOT_SIZES.length)],
+      side,
+      timestamp,
+    });
+  }
+  return trades;
 };
 
 export const generateMockAnaAnalysis = (symbol: string): AnaAnalysis => {

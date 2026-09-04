@@ -96,6 +96,22 @@ export interface StatsForNerds {
   lastUpdate: number;
 }
 
+/**
+ * A time & sales print.
+ *
+ * `side` is the aggressor: which party crossed the spread to make it happen.
+ * A print at the ask is a buy, at the bid a sell. That is what makes tape bias
+ * readable — it is not the direction of the price, it is who was impatient.
+ */
+export interface Trade {
+  id: string;
+  symbol: string;
+  price: number;
+  size: number;
+  side: 'buy' | 'sell';
+  timestamp: number;
+}
+
 export interface UserSettings {
   highContrastMode: boolean;
   soundEnabled: boolean;

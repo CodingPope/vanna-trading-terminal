@@ -44,6 +44,22 @@ class OrderBookEntry(BaseModel):
     side: Side
 
 
+class Trade(BaseModel):
+    """
+    A time & sales print.
+
+    `side` is the aggressor — who crossed the spread — not the direction of
+    the price. A print at the ask is a buy.
+    """
+
+    id: str
+    symbol: str
+    price: float = Field(gt=0)
+    size: float = Field(gt=0)
+    side: Literal["buy", "sell"]
+    timestamp: float = Field(gt=0)
+
+
 class CandlestickData(BaseModel):
     time: float
     open: float
@@ -77,6 +93,17 @@ class OrderBookDeltaMessage(BaseModel):
     data: List[OrderBookEntry]
 
 
+class TradeMessage(BaseModel):
+    """
+    Prints are batched per tick: a tape emits many more messages than a book,
+    and one frame per print would be pure overhead.
+    """
+
+    type: Literal["trade"] = "trade"
+    symbol: str
+    data: List[Trade]
+
+
 class PongMessage(BaseModel):
     type: Literal["pong"] = "pong"
     data: None = None
@@ -89,6 +116,7 @@ class ErrorMessage(BaseModel):
 
 ServerMessage = Union[
     MarketDataMessage,
+    TradeMessage,
     OrderBookSnapshotMessage,
     OrderBookDeltaMessage,
     PongMessage,
@@ -121,4 +149,7 @@ class SnapshotResponse(BaseModel):
     marketData: Dict[str, MarketData]
     orderBooks: Dict[str, List[OrderBookEntry]]
     candlesticks: Dict[str, List[CandlestickData]]
+    #: Recent prints, so the tape has history the moment the panel mounts
+    #: rather than filling in from empty over the next minute.
+    trades: Dict[str, List[Trade]]
     sequences: Dict[str, int]

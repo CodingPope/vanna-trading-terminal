@@ -204,4 +204,21 @@ test.describe('terminal', () => {
     await expect(modal.getByText('Command palette')).toBeVisible();
     await expect(modal).not.toContainText('Execute order');
   });
+
+  test('the trades tape fills from the feed and keeps growing', async ({ page }) => {
+    await enterTerminal(page);
+
+    const rows = page.locator('text=TRADES').locator('xpath=ancestor::div[contains(@class,"glass-panel")]')
+      .locator('div.grid.grid-cols-\\[auto_auto_auto_auto\\]');
+
+    // Backfilled from the snapshot, so it is populated on first paint rather
+    // than filling in from empty. The panel used to invent these itself.
+    await expect.poll(async () => rows.count(), { timeout: 20_000 }).toBeGreaterThan(3);
+    const first = await rows.count();
+
+    await page.waitForTimeout(4000);
+    // And live prints keep arriving.
+    await expect.poll(async () => rows.count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(first);
+  });
 });

@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .models import (
     ClientMessage,
     MarketDataMessage,
+    TradeMessage,
     OrderBookDeltaMessage,
     OrderBookSnapshotMessage,
     PongMessage,
@@ -80,6 +81,7 @@ async def snapshot(symbols: str = Query(default="")) -> SnapshotResponse:
         marketData={s: engine.market_data(s) for s in known},
         orderBooks={s: engine.order_book(s) for s in known},
         candlesticks={s: engine.candlesticks(s) for s in known},
+        trades={s: engine.recent_trades(s) for s in known},
         sequences={s: engine.sequence(s) for s in known},
     )
 
@@ -151,6 +153,13 @@ class Hub:
                     MarketDataMessage(data=engine.market_data(symbol)).model_dump(),
                     symbol,
                 )
+
+                prints = engine.next_trades(symbol)
+                if prints:
+                    self._broadcast(
+                        TradeMessage(symbol=symbol, data=prints).model_dump(),
+                        symbol,
+                    )
 
                 # Book updates are far less frequent than prints in a real feed.
                 if engine.rng.random() < 0.25:

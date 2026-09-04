@@ -3,6 +3,7 @@ import marketReducer from './slices/marketSlice';
 import orderBookReducer from './slices/orderBookSlice';
 import positionsReducer from './slices/positionsSlice';
 import panelsReducer from './slices/panelsSlice';
+import tradesReducer from './slices/tradesSlice';
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
     orderBook: orderBookReducer,
     positions: positionsReducer,
     panels: panelsReducer,
+    trades: tradesReducer,
   },
 });
 

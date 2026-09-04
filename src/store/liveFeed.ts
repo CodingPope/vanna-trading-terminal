@@ -16,6 +16,7 @@ import type { AppDispatch } from './store';
 import { batchUpdateMarketData, updateCandlesticks, setConnected } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
 import { setFocusList } from './slices/positionsSlice';
+import { setTrades } from './slices/tradesSlice';
 import { generateInitialFocusList } from './mockData';
 import { WebSocketClient } from '@/services/websocket';
 import { SnapshotService } from '@/services/snapshotService';
@@ -56,6 +57,12 @@ export async function startLiveFeed(
 
   for (const [symbol, data] of Object.entries(snapshot.candlesticks ?? {})) {
     dispatch(updateCandlesticks({ symbol, data }));
+  }
+
+  // Backfill the tape so the panel has history the moment it mounts rather
+  // than filling in from empty over the next minute.
+  for (const [symbol, trades] of Object.entries(snapshot.trades ?? {})) {
+    dispatch(setTrades({ symbol, trades }));
   }
 
   // The focus list is derived client-side from the quotes we just loaded. Only

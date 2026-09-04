@@ -1,18 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
-import { selectSelectedSymbol, selectMarketData } from '@/store/selectors';
+import { selectSelectedSymbol, selectTrades, selectTapeBias } from '@/store/selectors';
 import type { RootState } from '@/store/store';
 
-interface TradePrint {
-  id: string;
-  ts: number;
-  price: number;
-  size: number;
-  side: 'buy' | 'sell';
-}
-
-const MAX_TRADES = 140;
+/**
+ * Time & sales.
+ *
+ * Presentational only. This component used to generate the tape itself —
+ * seeding 36 synthetic prints per symbol and inventing more on every price
+ * tick with `Math.random()` — which meant the "trades" on screen were made up
+ * by the component displaying them, and stayed made up when connected to a
+ * real backend. Prints now come from whichever feed is running.
+ */
 
 function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString('en-US', {
@@ -23,76 +22,12 @@ function fmtTime(ts: number): string {
   });
 }
 
-function randomLot(): number {
-  const baseLots = [25, 50, 75, 100, 150, 200, 300, 500];
-  return baseLots[Math.floor(Math.random() * baseLots.length)] ?? 100;
-}
-
 export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
   const selectedSymbol = useAppSelector(selectSelectedSymbol);
   const symbol = propSymbol ?? selectedSymbol;
-  const marketData = useAppSelector((s: RootState) => selectMarketData(s, symbol));
-  const [trades, setTrades] = useState<TradePrint[]>([]);
-  const prevPriceRef = useRef<number | null>(null);
-  const prevSymbolRef = useRef<string | null>(null);
 
-  // Reseed the tape when the selected symbol changes.
-  useEffect(() => {
-    const base = marketData?.price ?? 100;
-    const now = Date.now();
-    const seeded = Array.from({ length: 36 }, (_, i) => {
-      const skew = (Math.random() - 0.5) * 0.08;
-      const price = Number((base + skew).toFixed(2));
-      const side: TradePrint['side'] = skew >= 0 ? 'buy' : 'sell';
-      return {
-        id: `${symbol}-seed-${i}-${now}`,
-        ts: now - i * 900,
-        price,
-        size: randomLot(),
-        side,
-      };
-    });
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- full tape reset on symbol switch, not a per-tick update
-    setTrades(seeded);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed only on symbol change, not every price tick
-  }, [symbol]);
-
-  useEffect(() => {
-    if (!marketData) return;
-
-    const symbolChanged = prevSymbolRef.current !== symbol;
-    prevSymbolRef.current = symbol;
-    const prev = symbolChanged || prevPriceRef.current === null ? marketData.price : prevPriceRef.current;
-    const delta = marketData.price - prev;
-    const side: TradePrint['side'] = delta >= 0 ? 'buy' : 'sell';
-    const intensity = Math.min(3, Math.max(1, Math.round(Math.abs(delta) * 30)));
-    const now = Date.now();
-
-    const next = Array.from({ length: intensity }, (_, i) => {
-      const jitter = (Math.random() - 0.5) * 0.03;
-      return {
-        id: `${symbol}-${now}-${i}`,
-        ts: now - i * 90,
-        price: Number((marketData.price + jitter).toFixed(2)),
-        size: randomLot(),
-        side,
-      };
-    });
-
-    setTrades(prevTrades => [...next, ...prevTrades].slice(0, MAX_TRADES));
-    prevPriceRef.current = marketData.price;
-  }, [symbol, marketData?.timestamp, marketData?.price, marketData]);
-
-  const { buyVol, sellVol } = useMemo(() => {
-    return trades.slice(0, 60).reduce(
-      (acc, t) => {
-        if (t.side === 'buy') acc.buyVol += t.size;
-        else acc.sellVol += t.size;
-        return acc;
-      },
-      { buyVol: 0, sellVol: 0 }
-    );
-  }, [trades]);
+  const trades = useAppSelector((s: RootState) => selectTrades(s, symbol));
+  const { buyVol, sellVol } = useAppSelector((s: RootState) => selectTapeBias(s, symbol));
 
   const total = buyVol + sellVol;
   const buyPct = total ? (buyVol / total) * 100 : 50;
@@ -104,10 +39,14 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
         <span className="font-mono text-xs text-vanna-text">{symbol}</span>
       </div>
 
-      <div className="grid grid-cols-[auto_1fr] gap-2 px-3 py-2 border-b border-white/5">
+      <div className="grid grid-cols-[auto_1fr] gap-2 px-3 py-2 border-b border-white/5 items-center">
         <span className="text-[10px] text-vanna-text-secondary uppercase tracking-wider">Tape Bias</span>
-        <div className="h-2 rounded bg-vanna-surface-light/60 overflow-hidden">
-          <div className="h-full bg-vanna-green" style={{ width: `${buyPct}%` }} />
+        <div
+          className="h-2 rounded bg-vanna-red/40 overflow-hidden"
+          title={`Buy ${buyVol.toLocaleString()} vs sell ${sellVol.toLocaleString()}`}
+        >
+          {/* Aggressor volume: who crossed the spread, not which way price went. */}
+          <div className="h-full bg-vanna-green transition-[width] duration-300" style={{ width: `${buyPct}%` }} />
         </div>
       </div>
 
@@ -119,22 +58,30 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {trades.map((trade) => (
-          <div
-            key={trade.id}
-            className="grid grid-cols-[auto_auto_auto_auto] gap-2 px-3 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors"
-          >
-            <span className="font-mono text-[11px] text-vanna-text-secondary">{fmtTime(trade.ts)}</span>
-            <span className={`font-mono text-[11px] text-right ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
-              {trade.price.toFixed(2)}
-            </span>
-            <span className="font-mono text-[11px] text-vanna-text text-right">{trade.size}</span>
-            <span className={`font-mono text-[11px] flex items-center justify-end gap-1 ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
-              {trade.side === 'buy' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-              {trade.side.toUpperCase()}
-            </span>
-          </div>
-        ))}
+        {trades.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-vanna-text-secondary">
+            Waiting for prints…
+          </p>
+        ) : (
+          trades.map((trade) => (
+            <div
+              key={trade.id}
+              className="grid grid-cols-[auto_auto_auto_auto] gap-2 px-3 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors"
+            >
+              <span className="font-mono text-[11px] text-vanna-text-secondary">{fmtTime(trade.timestamp)}</span>
+              <span className={`font-mono text-[11px] text-right ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
+                {trade.price.toFixed(2)}
+              </span>
+              <span className="font-mono text-[11px] text-vanna-text text-right">
+                {trade.size.toLocaleString()}
+              </span>
+              <span className={`font-mono text-[11px] flex items-center justify-end gap-1 ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
+                {trade.side === 'buy' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                {trade.side.toUpperCase()}
+              </span>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="px-3 py-2 border-t border-white/5 text-[10px] text-vanna-text-secondary flex items-center justify-between">
