@@ -15,6 +15,8 @@
 import type { AppDispatch } from './store';
 import { batchUpdateMarketData, updateCandlesticks, setConnected } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
+import { setFocusList } from './slices/positionsSlice';
+import { generateInitialFocusList } from './mockData';
 import { WebSocketClient } from '@/services/websocket';
 import { SnapshotService } from '@/services/snapshotService';
 
@@ -54,6 +56,13 @@ export async function startLiveFeed(
 
   for (const [symbol, data] of Object.entries(snapshot.candlesticks ?? {})) {
     dispatch(updateCandlesticks({ symbol, data }));
+  }
+
+  // The focus list is derived client-side from the quotes we just loaded. Only
+  // the simulation used to populate it, so connecting to a real backend left
+  // the panel reading "0/12" with nothing in it.
+  if (snapshot.marketData) {
+    dispatch(setFocusList(generateInitialFocusList(snapshot.marketData)));
   }
 
   const client = new WebSocketClient({ url: socketUrl(), dispatch });
