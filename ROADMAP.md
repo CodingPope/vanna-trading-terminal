@@ -54,6 +54,100 @@ done — the work so far is not visual, so there is nothing worth showing yet.
 
 ---
 
+---
+
+## Audit — 2026-09-04
+
+State of the repo after wiring the backend and the browser-level test pass.
+15,011 lines of TS/TSX, 884 of Python, 2,121 of tests. 131 unit tests, 12 e2e.
+Zero TODO/FIXME markers, five justified eslint-disables, lint and typecheck
+clean, CI green.
+
+### The honest picture of "live" mode
+
+Connecting to the backend does **not** mean the screen is server-driven. What
+actually comes off the wire today:
+
+| Panel / data | Source in live mode |
+|---|---|
+| Quotes, watchlist, ticker | **server** |
+| Order book, depth | **server** |
+| Chart candles | **server** |
+| Trades tape | **invented in the browser** — the server has no trade message at all |
+| Positions | **nothing** — the array is initialised empty and never filled |
+| ANA analysis | **invented in the browser** — `anaStream.ts` has zero consumers |
+| Focus list | derived client-side from server quotes |
+
+So four of the twelve panels still run on `Math.random()` while the footer says
+LIVE. That is the gap between "the transport works" and "the application works
+end to end", and it is the thing left to close.
+
+### Written but never wired
+
+- `services/anaStream.ts` — SSE client with a circuit breaker, a headline
+  feature in the README, **zero call sites**
+- `workers/indicatorWorker.ts` — **zero call sites**
+
+Both should be wired or deleted. Shipping a README claim with no caller is the
+same failure as the backpressure queue that could never shed.
+
+### Untested and unverified
+
+- **The server has no tests at all.** 884 lines of Python — the replay engine,
+  the tick-grid book, the hub — covered only indirectly through the client's
+  captured-stream fixture.
+- **Playwright is not in CI.** It is now the only thing catching the class of
+  bug that dominated this session: a blank grid, a dead control, a crossed
+  book. Every one of those passed lint, typecheck and the unit suite.
+- **`docker compose up` has never been run.** Written, never executed.
+- `ANCHOR` and `VOL` on the chart are unaudited.
+
+### Weight
+
+The production bundle is 2.83 MB (684 KB gzipped) in a single chunk. Two chart
+libraries are maintained in parallel — Recharts and Lightweight Charts, behind
+the TV/RC toggle — and the `chartType` bug existed precisely because the two
+paths had drifted. Three.js and AG Grid are the other heavy items.
+
+---
+
+## Revised plan — what "works end to end" needs
+
+Ordered so each step makes the next smaller.
+
+**A. Close the data gap (the server owns what is on screen)**
+1. Trades over the wire: a `trade` message type, a tape on the server, and
+   `TradesPanel` reading the store instead of generating prints. Deletes the
+   last per-tick `Math.random()` in a data panel.
+2. Positions from the server, so the blotter has something to show and Total
+   P&L stops reading a permanent +$0.00.
+3. ANA: wire `anaStream.ts` to a real SSE endpoint, or delete it and the
+   README claim. Not both.
+4. Delete `indicatorWorker.ts` unless it earns a caller.
+
+**B. Prove it**
+5. Server tests: the replay engine, tick-grid book invariants (never crossed,
+   bounded, sequences contiguous), and the hub under two clients — the bug
+   that broke two browser tabs.
+6. Playwright in CI, against the built bundle with the API running.
+7. Actually run `docker compose up` and fix what falls over.
+
+**C. The demo**
+8. Chaos toggle: inject gaps, force disconnects, burst the rate. Everything it
+   needs now exists — sequence validation proven, backpressure reachable,
+   `droppedMessages` exposed. Add a speed dial so a burst is visible.
+9. Order entry and blotter: optimistic `pending` → server ack `working` →
+   partial fills → cancel/amend → confirm above a notional threshold →
+   explicit error when the ack never lands.
+10. Playwright path: land → terminal → order → fill.
+
+**D. Ship**
+11. Real session fixture (`scripts/fetch_session.py`, never run).
+12. Deploy, screenshot, demo link.
+
+**Deferred, deliberately:** pick one chart library and delete the other; the
+VWAP semantics question; code-splitting the bundle.
+
 ## Tier 1: Stop the bleeding
 
 Target: 2 days. Nothing below this tier matters until all six are done, because right now
