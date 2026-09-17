@@ -26,6 +26,7 @@ import json
 import random
 import time
 from dataclasses import dataclass, field
+from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -127,7 +128,7 @@ def _tick_path(bar: Bar, steps: int, rng: random.Random) -> List[float]:
     if steps >= 4:
         hi_at = rng.randrange(1, steps - 1)
         lo_at = rng.randrange(1, steps - 1)
-        while lo_at == hi_at and steps > 4:
+        while lo_at == hi_at:
             lo_at = rng.randrange(1, steps - 1)
         path[hi_at] = bar.high
         path[lo_at] = bar.low
@@ -155,6 +156,9 @@ class SymbolState:
     day_high: float = 0.0
     day_low: float = 0.0
     cumulative_volume: float = 0.0
+    cycle: int = 0
+    history: list = field(default_factory=list)
+    tape: deque = field(default_factory=lambda: deque(maxlen=200))
 
     @property
     def price(self) -> float:
@@ -212,18 +216,25 @@ class ReplayEngine:
                 )
 
     def _make_state(self, symbol: str, bars: List[Bar]) -> SymbolState:
-        state = SymbolState(symbol=symbol, bars=bars)
-        state.path = _tick_path(bars[0], TICKS_PER_BAR, self.rng)
+        index = min(100, len(bars) - 1)
+        state = SymbolState(symbol=symbol, bars=bars, bar_index=index)
+        state.path = _tick_path(bars[index], TICKS_PER_BAR, self.rng)
         state.session_open = bars[0].open
-        state.day_high = bars[0].high
-        state.day_low = bars[0].low
-        # Credit the opening bar immediately; otherwise every symbol reports
-        # zero volume until the first rollover, which is what "0.0M" across the
-        # whole watchlist was.
-        state.cumulative_volume = bars[0].volume
+        past = bars[:index]
+        state.day_high = max([b.high for b in past] + [state.price])
+        state.day_low = min([b.low for b in past] + [state.price])
+        state.cumulative_volume = sum(b.volume for b in past)
+        state.history = [CandlestickData(time=b.time, open=b.open, high=b.high, low=b.low,
+                                         close=b.close, volume=b.volume) for b in past]
         self._seed_book(state)
         state.sequence = 1
         state.last_price = state.price
+        # Deterministic historical examples; no cursor or RNG mutation on reads.
+        for i, bar in enumerate(past[-40:]):
+            state.tape.append(Trade(id=f"{symbol}-history-{i}", symbol=symbol,
+                                    price=round(bar.close, 2), size=100,
+                                    side="buy" if bar.close >= bar.open else "sell",
+                                    timestamp=bar.time + 59_000))
         return state
 
     # ── order book ───────────────────────────────────────────────────────────
@@ -278,42 +289,48 @@ class ReplayEngine:
 
     # ── advancing ────────────────────────────────────────────────────────────
 
-    def advance(self, symbol: str) -> None:
-        """Move one symbol forward a single tick, wrapping at end of session."""
+    def event_time(self, symbol: str) -> float:
         state = self.states[symbol]
-        state.tick_index += 1
+        span = state.bars[-1].time - state.bars[0].time + 60_000
+        return state.bars[state.bar_index].time + state.cycle * span + state.tick_index * 1000
 
-        if state.tick_index >= len(state.path):
+    def current_candle(self, symbol: str) -> CandlestickData:
+        state = self.states[symbol]
+        path = state.path[:state.tick_index + 1]
+        bar = state.bars[state.bar_index]
+        return CandlestickData(time=self.event_time(symbol) - state.tick_index * 1000,
+                               open=path[0], high=max(path), low=min(path), close=path[-1],
+                               volume=bar.volume * (state.tick_index + 1) / TICKS_PER_BAR)
+
+    def advance(self, symbol: str) -> None:
+        state = self.states[symbol]
+        if state.tick_index == len(state.path) - 1:
+            state.history.append(self.current_candle(symbol))
+            state.history = state.history[-499:]
+            state.cumulative_volume += state.bars[state.bar_index].volume
             state.tick_index = 0
             state.bar_index = (state.bar_index + 1) % len(state.bars)
-            bar = state.bars[state.bar_index]
-            state.path = _tick_path(bar, TICKS_PER_BAR, self.rng)
-            state.cumulative_volume += bar.volume
-
-        price = state.price
-        state.day_high = max(state.day_high, price)
-        state.day_low = min(state.day_low, price)
+            if state.bar_index == 0:
+                state.cycle += 1
+            state.path = _tick_path(state.bars[state.bar_index], TICKS_PER_BAR, self.rng)
+        else:
+            state.tick_index += 1
+        state.day_high = max(state.day_high, state.price)
+        state.day_low = min(state.day_low, state.price)
 
     def market_data(self, symbol: str) -> MarketData:
         state = self.states[symbol]
         price = state.price
-        spread = spread_for(price)
         change = price - state.session_open
+        bid, ask = max(state.bids), min(state.asks)
         return MarketData(
-            symbol=symbol,
-            price=round(price, 4),
-            change=round(change, 4),
+            symbol=symbol, price=round(price, 4), change=round(change, 4),
             changePercent=round((change / state.session_open) * 100, 4),
-            volume=state.cumulative_volume,
-            high=round(state.day_high, 4),
-            low=round(state.day_low, 4),
-            open=round(state.session_open, 4),
-            close=round(price, 4),
-            timestamp=state.bars[state.bar_index].time,
-            bid=round(price - spread / 2, 4),
-            ask=round(price + spread / 2, 4),
-            bidSize=float(self.rng.randrange(100, 1200)),
-            askSize=float(self.rng.randrange(100, 1200)),
+            volume=state.cumulative_volume + self.current_candle(symbol).volume,
+            high=round(state.day_high, 4), low=round(state.day_low, 4),
+            open=round(state.session_open, 4), close=round(price, 4),
+            timestamp=self.event_time(symbol), bid=bid, ask=ask,
+            bidSize=state.bids[bid], askSize=state.asks[ask],
         )
 
     # ── positions ────────────────────────────────────────────────────────────
@@ -400,28 +417,21 @@ class ReplayEngine:
             else:
                 side = "buy" if self.rng.random() < 0.5 else "sell"
             # Buys lift the offer, sells hit the bid.
-            fill = price + spread / 2 if side == "buy" else price - spread / 2
+            fill = min(state.asks) if side == "buy" else max(state.bids)
             trades.append(Trade(
                 id=f"{symbol}-{state.trade_seq}",
                 symbol=symbol,
                 price=round(fill, 4),
                 size=float(self.rng.choice(self.LOT_SIZES)),
                 side=side,
-                timestamp=state.bars[state.bar_index].time + state.tick_index,
+                timestamp=self.event_time(symbol),
             ))
+        state.tape.extend(trades)
         return trades
 
     def recent_trades(self, symbol: str, count: int = 40) -> List[Trade]:
-        """A short backfill so the tape is not empty on first paint."""
-        out: List[Trade] = []
-        while len(out) < count:
-            batch = self.next_trades(symbol)
-            if not batch:
-                self.advance(symbol)
-                continue
-            out.extend(batch)
-            self.advance(symbol)
-        return out[:count]
+        """Read-only, newest-first snapshot of already generated prints."""
+        return list(reversed(self.states[symbol].tape))[:count]
 
     def order_book(self, symbol: str) -> List[OrderBookEntry]:
         return self._entries(self.states[symbol])
@@ -482,26 +492,8 @@ class ReplayEngine:
         return self._entries(self.states[symbol])
 
     def candlesticks(self, symbol: str, count: int = 100) -> List[CandlestickData]:
-        """
-        The `count` bars leading up to the current position.
-
-        Wraps around the session start rather than returning a short window:
-        at bar 0 there is no history behind us, and a chart with one candle in
-        it is worse than one showing the tail of the loop we are about to
-        re-enter.
-        """
         state = self.states[symbol]
-        total = len(state.bars)
-        end = state.bar_index + 1
-        take = min(count, total)
-        window = [state.bars[(end - take + i) % total] for i in range(take)]
-        return [
-            CandlestickData(
-                time=b.time, open=round(b.open, 4), high=round(b.high, 4),
-                low=round(b.low, 4), close=round(b.close, 4), volume=b.volume,
-            )
-            for b in window
-        ]
+        return (state.history + [self.current_candle(symbol)])[-count:]
 
     @property
     def symbols(self) -> List[str]:

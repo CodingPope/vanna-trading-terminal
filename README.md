@@ -2,161 +2,141 @@
 
 [![CI](https://github.com/CodingPope/vanna-trading-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/CodingPope/vanna-trading-terminal/actions/workflows/ci.yml)
 
-A multi-panel trading terminal built in React and TypeScript — order book, depth, tape,
-candles, positions and watchlist in a draggable, resizable workspace that persists.
+A front-office style paper-execution workstation built with React, TypeScript, FastAPI,
+REST, and WebSockets. It combines a streaming market view with an order ticket, versioned
+blotter, executions, positions, risk, and failure-injection controls.
 
-<!--
-  SCREENSHOT: drop a capture of the running terminal at docs/screenshot.png and
-  uncomment the line below. This is the first thing anyone looks at.
-  ![VANNA terminal](docs/screenshot.png)
--->
+![VANNA execution workstation](docs/screenshot.png)
 
-```
-Status   Front-end complete and running on a simulated feed.
-         The streaming layer is built and unit-tested but not yet wired to a backend.
-Demo     Not deployed yet — see Roadmap.
-```
+The market is synthetic and every order is a paper order. The application never connects
+to a broker or routes real money.
 
----
+## Run it
 
-## Quick start
-
-Requires Node 22+ and Yarn.
+The fastest path is Docker Desktop:
 
 ```bash
-yarn install
-yarn dev          # http://localhost:5173
+docker compose up --build
 ```
 
-Click the orb, or hit **Enter Terminal**, to get to the dashboard.
+Open [http://localhost:3000](http://localhost:3000). Stop it with `Ctrl+C`; remove the
+containers with `docker compose down`.
+
+For local development, use Node 22+, Yarn 1.22, and Python 3.12. Run the setup once:
 
 ```bash
-yarn lint         # eslint, including the React Compiler rule set
-yarn tsc -b       # typecheck (note: -b — see below)
-yarn test:run     # 47 unit tests
-yarn build        # tsc -b && vite build
+yarn install --frozen-lockfile
+python3.12 -m venv server/.venv
+server/.venv/bin/pip install -r server/requirements-dev.txt
 ```
 
-With Docker:
+Then start these in separate terminals:
 
 ```bash
-docker compose up --build     # http://localhost:3000
+# Terminal 1 — API, REST snapshots, paper execution, and WebSocket feed
+server/.venv/bin/python -m uvicorn app.main:app --app-dir server --reload --port 8000
 ```
 
----
+```bash
+# Terminal 2 — UI; Vite proxies /api and /ws to port 8000
+yarn dev
+```
 
-## Where the data actually comes from
+Open [http://localhost:5173/#terminal](http://localhost:5173/#terminal). The UI falls back
+to a clearly labelled browser simulation if the API is unavailable; paper order entry is
+enabled only when the API account and feed are synchronized.
 
-This is the part worth being precise about, because the repo contains two data paths
-and only one of them currently runs.
+## A five-minute demo
+
+1. Submit a market paper order for 150 shares. The blotter moves through `working` and
+   `partially filled` in 25-share slices; cancel the remainder and inspect fills and P&L.
+2. Submit a non-marketable limit order. Amend its price or quantity, then cancel it. The
+   server rejects edits made against a stale order version.
+3. In **Feed diagnostics**, click **Skip book sequence**. The client detects the gap,
+   rejects the unsafe delta, and requests a fresh order-book snapshot.
+4. Try **Stall feed 6s**. The terminal marks the feed stale and disables order entry until
+   transport health and account synchronization recover.
+5. Try **Invalid payload**, **Burst 1,000 quotes**, and **Disconnect feed**. The diagnostics
+   distinguish rejected envelopes, display-message shedding, and reconnect recovery.
+
+## System design
 
 ```mermaid
-flowchart TD
-    subgraph live["Streaming layer — built, tested, NOT yet wired"]
-        API["GET /api/snapshot<br/>SnapshotService"]
-        WS["WebSocket<br/>WebSocketClient"]
-        SSE["SSE /api/ana<br/>AnaStreamClient"]
-        API -.-> Q
-        WS --> Q["BackpressureQueue<br/>high/low priority"]
-        Q --> H["Handlers<br/>marketData · orderBook"]
-        H --> SEQ{"sequence<br/>== expected + 1?"}
-        SEQ -->|no| RESNAP["send subscribe<br/>requestSnapshot: true"]
-        RESNAP -.-> API
-    end
+flowchart LR
+  subgraph Browser
+    UI[React workstation]
+    Z[Zod boundary validation]
+    Q[Priority backpressure queue]
+    R[Redux state]
+    T[Paper ticket and blotter]
+    UI --> T
+    Z --> Q --> R --> UI
+  end
 
-    subgraph mock["Simulation — what runs today"]
-        RAF["requestAnimationFrame loop<br/>MarketStore.tsx, ~100ms"]
-    end
+  subgraph FastAPI
+    S[Coherent REST snapshot]
+    W[Sequenced WebSocket deltas]
+    M[Shared synthetic market clock]
+    P[Isolated paper accounts]
+    E[Matching and risk engine]
+    M --> S
+    M --> W
+    M --> E
+    P <--> E
+  end
 
-    SEQ -->|yes| STORE
-    RAF --> STORE["Redux Toolkit store<br/>market · orderBook · positions · panels"]
-    STORE --> SEL["Reselect selectors"]
-    SEL --> UI["11 panels"]
-
-    style live stroke-dasharray: 5 5
+  S -->|hydrate| Z
+  W -->|quotes, book, candles, trades, account snapshots| Z
+  T -->|idempotent REST commands| P
+  P -->|authoritative revisioned snapshot| Z
 ```
 
-**Today:** `MarketStore.tsx` runs a `requestAnimationFrame` loop that walks prices with a
-random step and batch-dispatches into the Redux store roughly every 100ms. Every panel you
-see is driven by that.
+The browser hydrates one coherent snapshot before accepting deltas. Order-book messages
+carry monotonically increasing sequences; a gap puts the book into recovery until a new
+snapshot arrives. All external payloads are parsed with Zod before they reach state.
 
-**Not yet running:** `services/websocket.ts`, `services/snapshotService.ts`,
-`services/anaStream.ts` and `workers/indicatorWorker.ts` are written, typed and (for the
-buffers) unit-tested, but nothing instantiates them. They are waiting on the backend in
-[ROADMAP.md](ROADMAP.md) Tier 2. Until that lands, treat the streaming layer as designed
-and reviewed but unproven against a real socket.
+Paper commands use a per-tab session and immutable `clientOrderId`. Retrying an unknown
+acknowledgement returns the original order instead of duplicating it. Amendments use an
+order version to prevent lost updates. The server owns order state, fills, fees, average
+cost, realized P&L, and exposure checks; the browser renders authoritative account
+snapshots.
 
----
+Market-data bursts enter a bounded priority queue. Disposable quote frames may be shed;
+order-book recovery and account snapshots take priority. If the server-side client queue
+fills, the server disconnects that client so it can recover from complete snapshots rather
+than silently consume a corrupt stream.
 
-## Why it is built this way
+Read [Architecture](docs/ARCHITECTURE.md) for invariants and trade-offs, and
+[Portfolio guide](docs/PORTFOLIO_GUIDE.md) for the interview story and remaining launch
+work.
 
-**Snapshot, then deltas.** An order book cannot be rebuilt from an update stream alone —
-you need a known-good starting state. `SnapshotService` fetches the full book over REST
-before the socket starts applying deltas, which is how real market data feeds work and why
-the two are separate code paths rather than one.
+## Validation
 
-**Sequence validation with re-snapshot on a gap.** Every delta carries a sequence number.
-`OrderBookHandler` refuses any delta that is not exactly `expected + 1` and returns `false`
-rather than applying it, because a book that has silently missed an update is worse than no
-book at all — it looks right and prices wrong. The client responds by requesting a fresh
-snapshot for that symbol. Reconnects call `resetAll()` so stale sequence state cannot leak
-across a disconnect.
-
-**Backpressure with priority, not a plain buffer.** Under a burst, dropping messages
-uniformly would mean dropping order book deltas — the ones that cannot be reconstructed.
-`BackpressureQueue` evicts the oldest *low*-priority message to make room, so book and
-position updates survive and a market-data tick is what gets sacrificed. If the queue is
-all high-priority, the incoming message is dropped instead of silently corrupting the book.
-
-**Exponential backoff.** Reconnects go 1s → 2s → 4s, capped at 30s, so a backend that is
-down does not get hammered by every open tab.
-
-**Ingestion split from presentation.** `services/handlers/` owns message decoding and
-store dispatch; components only read from selectors. Panels never touch a socket.
-
-**Zod at the boundary.** Anything arriving over SSE is `safeParse`d before it reaches the
-store, so a malformed chunk is a logged warning, not a runtime crash mid-render.
-
----
-
-## Layout
-
+```bash
+yarn verify      # lint, 178 frontend tests, server tests, production build
+yarn e2e         # 21 Chromium tests against the built UI and real FastAPI service
 ```
-src/
-  components/panels/   11 panels — order book, depth, tape, chart, positions, ANA, …
-  components/ui/       shadcn/ui primitives
-  services/            websocket · snapshot · SSE · buffers
-  services/handlers/   message decoding → store dispatch
-  store/               Redux Toolkit slices, selectors, Context providers
-  schemas/             Zod schemas for the API boundary
-  workers/             indicator computation (not yet wired)
-```
+
+The browser suite covers the order lifecycle, cancellation and amendment, account
+isolation, reconnect reconciliation, stale-feed gating, gap recovery, malformed data,
+burst behavior, order-book integrity, responsive overflow, and keyboard navigation.
 
 ## Stack
 
-| | |
+| Area | Technology |
 |---|---|
-| UI | React 19, TypeScript `strict`, Tailwind, shadcn/ui |
-| State | Redux Toolkit + Reselect, Zustand, Context |
-| Market data | AG Grid (order book), Lightweight Charts (candles), Recharts |
-| Validation | Zod |
-| Build | Vite 7, Vitest 3 |
-| Deploy | Multi-stage Docker → nginx with SPA fallback |
-| CI | Lint · typecheck · test · build, plus Lighthouse CI on PRs |
+| UI | React 19, TypeScript strict mode, Tailwind, shadcn/Radix |
+| State | Redux Toolkit, Reselect, Zustand for persisted UI preferences |
+| Market UI | AG Grid and Lightweight Charts |
+| Boundary contracts | Zod in the browser, Pydantic in FastAPI |
+| Transport | REST snapshot plus WebSocket deltas and heartbeats |
+| Testing | Vitest, Testing Library, Python `unittest`, Playwright |
+| Delivery | Vite production build, nginx reverse proxy, Docker Compose, GitHub Actions |
 
-A note on the typecheck command: the root `tsconfig.json` is `"files": []` plus project
-references, so `tsc --noEmit` silently checks **nothing**. Use `tsc -b`. CI got this wrong
-until recently and the step was passing vacuously.
+## Scope
 
----
-
-## Known gaps
-
-Kept here rather than in a commit message, because they are the honest state of the repo.
-Full detail and ordering in [ROADMAP.md](ROADMAP.md).
-
-- No backend. The streaming layer has never run against a real socket.
-- No order entry or blotter — every panel is read-only.
-- `services/websocket.ts` has no tests, despite being the most interesting code here.
-- The FPS and render-time figures in the stats footer are hardcoded, not measured.
-- Two overlapping UI state layers (`UIContext` and `uiStore`) from an unfinished migration.
+This is a deterministic demonstration environment, not an exchange simulator. Matching is
+a documented touch-price model with 25-share slices, a 1% market-order collar, average-cost
+positions, $0.005/share fees, a $50,000 per-order cap, and a $250,000 gross-exposure cap.
+Accounts live in process memory and expire; there is no authentication, persistence,
+exchange calendar, corporate-action model, or real broker connectivity.

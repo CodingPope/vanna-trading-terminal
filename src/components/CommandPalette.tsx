@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { selectMarketDataMap } from '@/store/selectors';
-import { Search, TrendingUp, Bell, Settings, User } from 'lucide-react';
+import { Search, TrendingUp, Settings } from 'lucide-react';
 
 interface CommandItem {
   id: string;
@@ -47,23 +47,11 @@ export function CommandPalette() {
       label: 'Go to Dashboard',
       description: 'Switch to main trading view',
       icon: TrendingUp,
-      shortcut: 'G D',
       action: () => {
         setView('dashboard');
         toggleCommandPalette();
       },
     },
-    {
-      id: 'go-morning-brief',
-      label: 'Go to Morning Brief',
-      description: 'View pre-market analysis',
-      icon: TrendingUp,
-      action: () => {
-        setView('morning-brief');
-        toggleCommandPalette();
-      },
-    },
-    
     // Phase switching
     {
       id: 'phase-pre-market',
@@ -112,26 +100,8 @@ export function CommandPalette() {
       label: 'Open Settings',
       description: 'Configure preferences',
       icon: Settings,
-      shortcut: 'Cmd + ,',
       action: () => {
-        toggleCommandPalette();
-      },
-    },
-    {
-      id: 'notifications',
-      label: 'View Notifications',
-      description: 'Check alerts and messages',
-      icon: Bell,
-      action: () => {
-        toggleCommandPalette();
-      },
-    },
-    {
-      id: 'profile',
-      label: 'View Profile',
-      description: 'Account settings',
-      icon: User,
-      action: () => {
+        useUIStore.getState().toggleSettings();
         toggleCommandPalette();
       },
     },

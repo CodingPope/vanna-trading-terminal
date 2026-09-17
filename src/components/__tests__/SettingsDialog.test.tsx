@@ -23,10 +23,8 @@ beforeEach(() => {
     settings: {
       highContrastMode: false,
       orbScope: 'market' as const,
-      soundEnabled: true,
       notificationsEnabled: true,
       defaultTimeframe: '5m',
-      riskPerTrade: 1,
     },
   });
 });
@@ -55,11 +53,11 @@ describe('SettingsDialog', () => {
   it('reflects current state rather than defaults', () => {
     useUIStore.setState({
       showSettings: true,
-      settings: { ...useUIStore.getState().settings, soundEnabled: false },
+      settings: { ...useUIStore.getState().settings, notificationsEnabled: false },
     });
     render(<SettingsDialog />);
 
-    expect(screen.getByRole('switch', { name: 'Sound' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('switch', { name: 'Notifications' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('changes the default timeframe', () => {
@@ -71,13 +69,12 @@ describe('SettingsDialog', () => {
     expect(useUIStore.getState().settings.defaultTimeframe).toBe('15m');
   });
 
-  it('changes risk per trade', () => {
+  it('only exposes preferences that affect the running application', () => {
     useUIStore.setState({ showSettings: true });
     render(<SettingsDialog />);
 
-    fireEvent.change(screen.getByLabelText('Risk per trade'), { target: { value: '2.5' } });
-
-    expect(useUIStore.getState().settings.riskPerTrade).toBe(2.5);
+    expect(screen.queryByRole('switch', { name: 'Sound' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Risk per trade')).not.toBeInTheDocument();
   });
 
   it('closes from the close button', () => {

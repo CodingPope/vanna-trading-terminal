@@ -4,7 +4,6 @@ import { useAppSelector, useMarketActions } from '@/store/hooks';
 import { useUIStore } from '@/store/uiStore';
 import { NotificationCenter } from './NotificationCenter';
 import { selectCurrentPhase, selectMarketRegime, selectStats } from '@/store/selectors';
-import { OrbIndicator } from './DisplacementOrb';
 import { 
   Search, 
   Settings, 
@@ -27,9 +26,7 @@ export function Header() {
   // is impure, and this already ticks once a second.
   const lastUpdate = useAppSelector(selectStats).lastUpdate;
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const phaseMenuRef = useRef<HTMLDivElement>(null);
-  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const currentPhase = TRADING_PHASES.find(p => p.id === currentPhaseId);
 
@@ -38,9 +35,6 @@ export function Header() {
     const handleClickOutside = (e: MouseEvent) => {
       if (phaseMenuRef.current && !phaseMenuRef.current.contains(e.target as Node)) {
         setShowPhaseMenu(false);
-      }
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -151,7 +145,7 @@ export function Header() {
       <div className="flex items-center gap-2">
         {/* Orb status indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-vanna-surface-light/30">
-          <OrbIndicator size={24} />
+          <span className="text-vanna-cyan text-xs" aria-hidden="true">●</span>
           <div className="flex flex-col">
             <span className="terminal-text text-[10px] text-vanna-text-secondary">REGIME</span>
             <span className={`terminal-text text-[10px] ${
@@ -194,57 +188,12 @@ export function Header() {
           <Settings className="w-4 h-4 text-vanna-text-secondary" />
         </button>
 
-        {/* User menu */}
-        <div className="relative" ref={userMenuRef}>
-          <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center gap-2 p-1.5 rounded-md hover:bg-white/5 transition-colors"
-            aria-expanded={showUserMenu}
-            aria-haspopup="menu"
-          >
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-white/10" aria-label="Paper demo account">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-vanna-cyan/30 to-vanna-gold/30 
                             flex items-center justify-center border border-white/10">
               <User className="w-4 h-4 text-vanna-text" />
             </div>
-          </button>
-
-          {showUserMenu && (
-            <div 
-              className="absolute top-full right-0 mt-1 w-48 glass-panel py-1 z-50"
-              role="menu"
-            >
-              <div className="px-3 py-2 border-b border-white/5">
-                <p className="text-sm text-vanna-text">Trader</p>
-                <p className="text-xs text-vanna-text-secondary">pro@vanta.trade</p>
-              </div>
-              <button 
-                className="w-full px-3 py-2 text-left text-sm text-vanna-text hover:bg-white/5 transition-colors"
-                role="menuitem"
-              >
-                Profile
-              </button>
-              <button 
-                className="w-full px-3 py-2 text-left text-sm text-vanna-text hover:bg-white/5 transition-colors"
-                role="menuitem"
-              >
-                API Keys
-              </button>
-              <button 
-                className="w-full px-3 py-2 text-left text-sm text-vanna-text hover:bg-white/5 transition-colors"
-                role="menuitem"
-              >
-                Billing
-              </button>
-              <div className="border-t border-white/5 mt-1 pt-1">
-                <button 
-                  className="w-full px-3 py-2 text-left text-sm text-vanna-red hover:bg-white/5 transition-colors"
-                  role="menuitem"
-                >
-                  Sign Out
-                </button>
-              </div>
-            </div>
-          )}
+            <span className="hidden lg:inline terminal-text text-[10px] text-vanna-text-secondary">DEMO</span>
         </div>
       </div>
     </header>

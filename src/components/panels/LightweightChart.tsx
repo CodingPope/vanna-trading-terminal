@@ -2,7 +2,7 @@
  * TradingView Lightweight Charts integration.
  * Handles candlesticks, volume, VWAP, and anchored VWAP with rAF-throttled updates.
  */
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   createChart,
   AreaSeries,
@@ -16,6 +16,7 @@ import {
   type LineData,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { computeVWAP } from '@/lib/vwap';
 import type { CandlestickData, MarketData } from '@/types';
 
 interface LightweightChartProps {
@@ -37,21 +38,8 @@ function msToSec(ms: number): UTCTimestamp {
   return Math.floor(ms / 1000) as UTCTimestamp;
 }
 
-function computeVWAP(candles: CandlestickData[], fromIndex = 0): (number | null)[] {
-  let cumPV = 0;
-  let cumVol = 0;
-  return candles.map((c, i) => {
-    if (i < fromIndex) return null;
-    const typical = (c.high + c.low + c.close) / 3;
-    cumPV += typical * c.volume;
-    cumVol += c.volume;
-    return cumVol ? cumPV / cumVol : c.close;
-  });
-}
-
 export function LightweightChart({
   candlesticks,
-  marketData,
   chartType = 'candlestick',
   showVolume = true,
   anchorTs,
@@ -65,8 +53,8 @@ export function LightweightChart({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const vwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const avwapSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const pendingUpdateRef = useRef<CandlestickData | null>(null);
+  const onAnchorRef = useRef(onAnchor);
+  useEffect(() => { onAnchorRef.current = onAnchor; }, [onAnchor]);
 
   // Initialize chart once
   useEffect(() => {
@@ -76,7 +64,7 @@ export function LightweightChart({
     const chart = createChart(container, {
       layout: {
         background: { color: 'transparent' },
-        textColor: '#606080',
+        textColor: '#9999b3',
         fontSize: 10,
         fontFamily: "'JetBrains Mono', monospace",
       },
@@ -162,8 +150,8 @@ export function LightweightChart({
 
     // Handle click → set anchor
     chart.subscribeClick((param) => {
-      if (param.time && onAnchor) {
-        onAnchor((param.time as number) * 1000);
+      if (param.time && onAnchorRef.current) {
+        onAnchorRef.current((param.time as number) * 1000);
       }
     });
 
@@ -180,11 +168,9 @@ export function LightweightChart({
 
     return () => {
       ro.disconnect();
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       chart.remove();
       chartRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Set full candlestick dataset
@@ -228,7 +214,7 @@ export function LightweightChart({
     // Anchored VWAP
     if (anchorTs !== null && anchorTs !== undefined) {
       const anchorIdx = sorted.findIndex(c => c.time >= anchorTs);
-      const avwapValues = computeVWAP(sorted, Math.max(0, anchorIdx));
+      const avwapValues = computeVWAP(sorted, anchorIdx < 0 ? sorted.length : anchorIdx);
       const avwapData: LineData[] = sorted
         .map((c, i) => avwapValues[i] !== null ? { time: msToSec(c.time), value: avwapValues[i]! } : null)
         .filter(Boolean) as LineData[];
@@ -244,45 +230,6 @@ export function LightweightChart({
     lineSeriesRef.current?.applyOptions({ visible: chartType === 'line' });
     areaSeriesRef.current?.applyOptions({ visible: chartType === 'area' });
   }, [chartType]);
-
-  // Real-time tick update — rAF throttled to ~60fps
-  const scheduleUpdate = useCallback((data: CandlestickData) => {
-    pendingUpdateRef.current = data;
-    if (rafRef.current) return; // already scheduled
-    rafRef.current = requestAnimationFrame(() => {
-      const pending = pendingUpdateRef.current;
-      if (pending && candleSeriesRef.current) {
-        const time = msToSec(pending.time);
-        candleSeriesRef.current.update({
-          time,
-          open: pending.open,
-          high: pending.high,
-          low: pending.low,
-          close: pending.close,
-        });
-        // Otherwise line and area freeze at the last full bar while the
-        // candlestick view keeps ticking.
-        lineSeriesRef.current?.update({ time, value: pending.close });
-        areaSeriesRef.current?.update({ time, value: pending.close });
-      }
-      pendingUpdateRef.current = null;
-      rafRef.current = null;
-    });
-  }, []);
-
-  // When the price changes, update the last candle in real-time
-  const price = marketData?.price;
-  useEffect(() => {
-    if (price === undefined || !candlesticks.length) return;
-    const last = candlesticks[candlesticks.length - 1];
-    if (!last) return;
-    scheduleUpdate({
-      ...last,
-      close: price,
-      high: Math.max(last.high, price),
-      low: Math.min(last.low, price),
-    });
-  }, [price, candlesticks, scheduleUpdate]);
 
   return (
     <div

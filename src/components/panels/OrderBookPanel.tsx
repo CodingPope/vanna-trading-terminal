@@ -12,7 +12,7 @@ import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 // tests get a working grid too.
 ModuleRegistry.registerModules([AllCommunityModule]);
 import { useSelector } from 'react-redux';
-import { Settings, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import { selectOrderBook, selectMarketData, selectSelectedSymbol } from '@/store/selectors';
 import type { RootState } from '@/store/store';
 import type { OrderBookEntry } from '@/types';
@@ -115,6 +115,9 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
   const getRowId = useCallback((params: { data: OrderBookEntry }) =>
     `${params.data.side}-${params.data.price}`, []);
 
+  const recovering = useSelector((s: RootState) => s.orderBook.recovering[symbol]);
+  if (recovering) return <p role="status" className="p-4 text-amber-300 text-sm">Recovering {symbol} book · waiting for a complete snapshot</p>;
+
   const currentPrice = marketData?.price ?? 0;
 
   return (
@@ -122,9 +125,7 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 flex-shrink-0">
         <span className="header-caps">Order Book</span>
-        <button className="p-1.5 rounded hover:bg-white/5 transition-colors" aria-label="Settings">
-          <Settings className="w-3.5 h-3.5 text-vanna-text-secondary" />
-        </button>
+
       </div>
 
       {/* Symbol info */}
@@ -154,7 +155,6 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           theme="legacy"
           context={gridContext}
           animateRows={false}
-          suppressCellFocus
           suppressMovableColumns
           domLayout="normal"
         />
@@ -179,7 +179,6 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
           theme="legacy"
           context={gridContext}
           animateRows={false}
-          suppressCellFocus
           suppressMovableColumns
           domLayout="normal"
         />

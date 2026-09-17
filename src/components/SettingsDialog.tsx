@@ -15,7 +15,7 @@ import { ShortcutTable } from './ShortcutTable';
 import { OrbLegend } from './OrbLegend';
 import type { UserSettings } from '@/types';
 
-const TIMEFRAMES: UserSettings['defaultTimeframe'][] = ['1m', '5m', '15m', '1h', '1d'];
+const TIMEFRAMES: UserSettings['defaultTimeframe'][] = ['1m', '5m', '15m', '1h'];
 
 function Toggle({
   label,
@@ -95,14 +95,8 @@ export function SettingsDialog() {
             onChange={v => updateSettings({ highContrastMode: v })}
           />
           <Toggle
-            label="Sound"
-            hint="Audio cue on fills and triggered alerts"
-            checked={settings.soundEnabled}
-            onChange={v => updateSettings({ soundEnabled: v })}
-          />
-          <Toggle
             label="Notifications"
-            hint="Show toasts for alerts and system events"
+            hint="Show toast notifications for alerts and system events"
             checked={settings.notificationsEnabled}
             onChange={v => updateSettings({ notificationsEnabled: v })}
           />
@@ -129,27 +123,6 @@ export function SettingsDialog() {
             </div>
           </div>
 
-          <div className="py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-vanna-text">Risk per trade</span>
-              <span className="font-mono text-sm text-vanna-gold">
-                {settings.riskPerTrade.toFixed(1)}%
-              </span>
-            </div>
-            <span className="block text-xs text-vanna-text-secondary mt-0.5 mb-2">
-              Share of account equity risked on a single position
-            </span>
-            <input
-              type="range"
-              min={0.1}
-              max={5}
-              step={0.1}
-              value={settings.riskPerTrade}
-              aria-label="Risk per trade"
-              onChange={e => updateSettings({ riskPerTrade: Number(e.target.value) })}
-              className="w-full accent-vanna-cyan"
-            />
-          </div>
         </div>
 
         <div className="px-4 py-3 border-t border-white/5">

@@ -62,7 +62,7 @@ export class ObjectPool<T extends object> {
 /**
  * Priority message queue with backpressure.
  * Drops low-priority messages when the queue exceeds capacity.
- * High-priority messages (order book, positions) are never dropped.
+ * If all entries are high priority, enqueue returns false; the caller must recover.
  */
 export type MessagePriority = 'high' | 'low';
 
@@ -79,7 +79,7 @@ export class BackpressureQueue<T> {
 
   constructor(maxSize = 1000) { this.maxSize = maxSize; }
 
-  enqueue(data: T, priority: MessagePriority = 'low'): void {
+  enqueue(data: T, priority: MessagePriority = 'low'): boolean {
     if (this.queue.length >= this.maxSize) {
       // Evict the oldest low-priority item regardless of incoming priority.
       // High-priority messages can still bump a low-priority one out.
@@ -90,10 +90,11 @@ export class BackpressureQueue<T> {
       } else {
         // All queued items are high priority — drop the incoming message.
         this._dropped++;
-        return;
+        return false;
       }
     }
     this.queue.push({ data, priority, timestamp: Date.now() });
+    return true;
   }
 
   dequeue(): QueuedMessage<T> | undefined { return this.queue.shift(); }

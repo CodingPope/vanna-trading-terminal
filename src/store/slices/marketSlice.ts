@@ -25,9 +25,15 @@ export interface MarketSliceState {
    */
   feedSource: 'connecting' | 'live' | 'simulated';
   lastUpdate: number;
+  sourceMode: 'synthetic' | 'replay';
+  lastReceivedAt: number;
+  diagnostics: { received: number; invalid: number; dropped: number; gaps: number; reconnects: number; queueDepth: number; peakQueue: number; processingMs: number };
+
 }
 
 const initialState: MarketSliceState = {
+  sourceMode: 'synthetic', lastReceivedAt: 0,
+  diagnostics: { received: 0, invalid: 0, dropped: 0, gaps: 0, reconnects: 0, queueDepth: 0, peakQueue: 0, processingMs: 0 },
   entities: initEntities,
   candlesticks: initCandlesticks,
   selectedSymbol: 'AAPL',
@@ -42,13 +48,26 @@ export const marketSlice = createSlice({
   name: 'market',
   initialState,
   reducers: {
+    setSourceMode(state, action: PayloadAction<'synthetic' | 'replay'>) { state.sourceMode = action.payload; },
+    setDiagnostics(state, action: PayloadAction<Partial<MarketSliceState['diagnostics']>>) { Object.assign(state.diagnostics, action.payload); },
+    upsertCandle(state, action: PayloadAction<{ symbol: string; candle: CandlestickData }>) {
+      const { symbol, candle } = action.payload;
+      const candles = state.candlesticks[symbol] ?? [];
+      const last = candles[candles.length - 1];
+      if (last && last.time > candle.time) return;
+      if (last?.time === candle.time) candles[candles.length - 1] = candle;
+      else candles.push(candle);
+      state.candlesticks[symbol] = candles.slice(-500);
+    },
     updateMarketData(state, action: PayloadAction<MarketData>) {
       state.entities[action.payload.symbol] = action.payload;
       state.lastUpdate = Date.now();
+      state.lastReceivedAt = state.lastUpdate;
     },
     batchUpdateMarketData(state, action: PayloadAction<MarketData[]>) {
       action.payload.forEach(d => { state.entities[d.symbol] = d; });
       state.lastUpdate = Date.now();
+      state.lastReceivedAt = state.lastUpdate;
     },
     updateCandlesticks(state, action: PayloadAction<{ symbol: string; data: CandlestickData[] }>) {
       state.candlesticks[action.payload.symbol] = action.payload.data;
@@ -83,6 +102,7 @@ export const marketSlice = createSlice({
 });
 
 export const {
+  setSourceMode, setDiagnostics, upsertCandle,
   updateMarketData,
   batchUpdateMarketData,
   updateCandlesticks,

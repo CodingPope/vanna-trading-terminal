@@ -11,19 +11,21 @@
  * simulation's rAF loop reads entities via `store.getState()` rather than
  * `useSelector`, so this component does not re-render on every tick.
  */
+import { useUIStore } from './uiStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import type { AppDispatch, RootState } from './store';
 import type { Store } from '@reduxjs/toolkit';
 import {
   batchUpdateMarketData,
+  upsertCandle,
   setConnected as rtkSetConnected,
   setFeedSource,
 } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
 import { addTrades } from './slices/tradesSlice';
 import { setFocusList } from './slices/positionsSlice';
-import { removePriceAlert } from './slices/panelsSlice';
+import { removePriceAlert, triggerPriceAlert } from './slices/panelsSlice';
 import { useAppSelector } from './hooks';
 import { usePerformanceStats } from '@/hooks/usePerformanceStats';
 import { selectAlerts } from './selectors';
@@ -91,6 +93,16 @@ function useMockFeed(dispatch: AppDispatch, store: Store<RootState>, enabled: bo
         });
 
         if (updates.length) dispatch(batchUpdateMarketData(updates));
+        for (const q of updates) {
+          dispatch(setOrderBook({ symbol: q.symbol, entries: generateMockOrderBook(q.price) }));
+          const candles = store.getState().market.candlesticks[q.symbol];
+          const last = candles?.[candles.length - 1];
+          const time = Math.floor(now / 60000) * 60000;
+          const same = last?.time === time;
+          dispatch(upsertCandle({ symbol: q.symbol, candle: { time, open: same ? last.open : q.price,
+            close: q.price, high: same ? Math.max(last.high, q.price) : q.price,
+            low: same ? Math.min(last.low, q.price) : q.price, volume: same ? last.volume + 100 : 100 } }));
+        }
         for (const p of prints) dispatch(addTrades({ symbol: p.symbol, trades: p.trades }));
         lastTickRef.current = now;
       }
@@ -161,6 +173,25 @@ function useAlertCleanup(dispatch: AppDispatch) {
 export function MarketFeedProvider({ children }: { children: React.ReactNode }) {
   const dispatch = useDispatch<AppDispatch>();
   const store = useStore<RootState>();
+
+  useEffect(() => {
+    let previous = store.getState().market.entities;
+    return store.subscribe(() => {
+      const state = store.getState();
+      const current = state.market.entities;
+      if (current === previous) return;
+      const before = previous;
+      previous = current;
+      for (const alert of state.panels.alerts) {
+        const a = before[alert.symbol]?.price, b = current[alert.symbol]?.price;
+        if (!alert.triggered && a !== undefined && b !== undefined &&
+            ((a < alert.price && b >= alert.price) || (a > alert.price && b <= alert.price))) {
+          dispatch(triggerPriceAlert(alert.id));
+          useUIStore.getState().addNotification({ type: 'info', message: `${alert.symbol} crossed $${alert.price.toFixed(2)}` });
+        }
+      }
+    });
+  }, [dispatch, store]);
 
   const source = useFeedSource(dispatch);
   useMockFeed(dispatch, store, source === 'simulated');

@@ -147,7 +147,7 @@ describe('startLiveFeed', () => {
 
     const handle = await startLiveFeed(dispatch as unknown as AppDispatch, ['AAPL']);
 
-    expect(FakeWebSocket.instances[0].url).toBe('ws://localhost:3000/ws');
+    expect(FakeWebSocket.instances[0].url).toMatch(/^ws:\/\/localhost:3000\/ws\?session=[a-zA-Z0-9_-]+$/);
     handle?.stop();
   });
 
@@ -158,7 +158,7 @@ describe('startLiveFeed', () => {
     const handle = await startLiveFeed(dispatch as unknown as AppDispatch, ['AAPL']);
 
     // A ws:// socket from an https page is blocked as mixed content.
-    expect(FakeWebSocket.instances[0].url).toBe('wss://vanna.example.com/ws');
+    expect(FakeWebSocket.instances[0].url).toMatch(/^wss:\/\/vanna\.example\.com\/ws\?session=[a-zA-Z0-9_-]+$/);
     handle?.stop();
   });
 });

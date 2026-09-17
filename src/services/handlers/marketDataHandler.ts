@@ -33,6 +33,7 @@ export class MarketDataHandler {
    * drain is already running inside an animation frame.
    */
   flush(): void {
+    if (this.flushTimer !== null) cancelAnimationFrame(this.flushTimer);
     if (this.pending.length > 0) {
       this.dispatch(batchUpdateMarketData([...this.pending]));
       this.pending = [];

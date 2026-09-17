@@ -175,3 +175,5 @@ class SnapshotResponse(BaseModel):
     #: Open positions. Not per-symbol: a book spans the account.
     positions: List[Position]
     sequences: Dict[str, int]
+    source: Literal["synthetic", "replay"] = "synthetic"
+    sessionDate: Optional[str] = None

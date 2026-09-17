@@ -20,6 +20,10 @@ import { TickerPanel } from '@/components/panels/TickerPanel';
 import { TradesPanel } from '@/components/panels/TradesPanel';
 import { DepthPanel } from '@/components/panels/DepthPanel';
 import { DepthChartPanel } from '@/components/panels/DepthChartPanel';
+import { OrderEntryPanel } from '@/components/panels/OrderEntryPanel';
+import { OrdersPanel } from '@/components/panels/OrdersPanel';
+import { DiagnosticsPanel } from '@/components/panels/DiagnosticsPanel';
+import { PanelBoundary } from '@/components/PanelBoundary';
 import type { Panel } from '@/types';
 
 // Panel component mapping
@@ -31,6 +35,9 @@ type PanelComponentProps = {
 };
 
 const PANEL_COMPONENTS: Record<Panel['type'], React.ComponentType<PanelComponentProps>> = {
+  'order-entry': OrderEntryPanel,
+  orders: OrdersPanel,
+  diagnostics: DiagnosticsPanel,
   watchlist: WatchlistPanel,
   ticker: TickerPanel,
   chart: ChartPanel,
@@ -184,11 +191,11 @@ export function Dashboard() {
   const { updatePanels } = useMarketActions();
   const { saveWorkspace, loadWorkspace, deleteWorkspace } = useWorkspaceActions();
   const [layoutMode, setLayoutMode] = useState<'grid' | 'free'>(() => {
-    const stored = localStorage.getItem('vanna:layout-mode');
-    return stored === 'grid' || stored === 'free' ? stored : 'free';
+    const stored = localStorage.getItem('vanna:layout-mode:v2');
+    return stored === 'grid' || stored === 'free' ? stored : 'grid';
   });
   useEffect(() => {
-    localStorage.setItem('vanna:layout-mode', layoutMode);
+    localStorage.setItem('vanna:layout-mode:v2', layoutMode);
   }, [layoutMode]);
 
   const handleResetLayout = () => {
@@ -204,7 +211,7 @@ export function Dashboard() {
     if (!name) return;
     const ws = saveWorkspace(name, layoutMode);
     if (ws) {
-      localStorage.setItem('vanna:layout-mode', ws.layoutMode);
+      localStorage.setItem('vanna:layout-mode:v2', ws.layoutMode);
     }
   };
 
@@ -212,7 +219,7 @@ export function Dashboard() {
     const ws = loadWorkspace(id);
     if (ws) {
       setLayoutMode(ws.layoutMode);
-      localStorage.setItem('vanna:layout-mode', ws.layoutMode);
+      localStorage.setItem('vanna:layout-mode:v2', ws.layoutMode);
     }
   };
 
@@ -229,20 +236,6 @@ export function Dashboard() {
     );
     updatePanels(newPanels);
   }, [panels, updatePanels]);
-
-  // Grid layout positions
-  const gridLayout = [
-    { id: 'watchlist', x: 0, y: 0, width: 280, height: 420 },
-    { id: 'ticker', x: 0, y: 430, width: 280, height: 200 },
-    { id: 'focus-list', x: 0, y: 640, width: 280, height: 210 },
-    { id: 'chart', x: 290, y: 0, width: 560, height: 430 },
-    { id: 'depth-chart', x: 290, y: 440, width: 560, height: 200 },
-    { id: 'ana', x: 290, y: 650, width: 270, height: 200 },
-    { id: 'trades', x: 570, y: 650, width: 280, height: 200 },
-    { id: 'orderbook', x: 860, y: 0, width: 260, height: 430 },
-    { id: 'depth', x: 860, y: 440, width: 260, height: 200 },
-    { id: 'positions', x: 860, y: 650, width: 260, height: 200 },
-  ];
 
   return (
     <div className="h-screen flex flex-col bg-vanna-bg">
@@ -276,6 +269,7 @@ export function Dashboard() {
             Reset
           </button>
           <select
+            aria-label="Saved workspace"
             value={currentWorkspaceId || ''}
             onChange={(e) => handleLoadWorkspace(e.target.value)}
             className="ml-2 px-2 py-1 text-[10px] rounded bg-vanna-surface-light/40 border border-white/10 text-vanna-text"
@@ -300,15 +294,18 @@ export function Dashboard() {
         </div>
 
         {/* Panels container — starts below the workspace controls band. */}
-        <div className="absolute inset-x-0 bottom-0 top-10 p-4 overflow-auto">
+        <div className={`absolute inset-x-0 bottom-0 top-10 overflow-auto ${layoutMode === 'grid' ? 'execution-grid' : 'p-4'}`}>
           {panels.map((panel) => {
             const PanelComponent = PANEL_COMPONENTS[panel.type];
             if (!PanelComponent) return null;
 
-            const layout = gridLayout.find(l => l.id === panel.id);
-            const displayPanel = layoutMode === 'grid' && layout 
-              ? { ...panel, ...layout } 
-              : panel;
+            if (layoutMode === 'grid') return (
+              <section key={panel.id} aria-label={panel.title} className={`glass-panel min-w-0 flex flex-col overflow-hidden desk-panel-${panel.id}`}>
+                <div className="px-3 py-2 text-[11px] font-semibold tracking-wider border-b border-white/10 text-vanna-text-secondary">{panel.title}</div>
+                <div className="flex-1 min-h-0 overflow-hidden"><PanelBoundary><PanelComponent /></PanelBoundary></div>
+              </section>
+            );
+            const displayPanel = panel;
 
             return (
               <DraggablePanel
@@ -318,7 +315,7 @@ export function Dashboard() {
                 canDrag={layoutMode === 'free'}
                 canResize={layoutMode === 'free'}
               >
-                <PanelComponent />
+                <PanelBoundary><PanelComponent /></PanelBoundary>
               </DraggablePanel>
             );
           })}

@@ -21,11 +21,8 @@ function watchConsole(page: Page): string[] {
 }
 
 async function enterTerminal(page: Page) {
-  await page.goto('/');
-  const enter = page.getByRole('button', { name: /enter terminal/i });
-  if (await enter.count()) await enter.click();
-  // The landing page holds a deliberate loading beat before the dashboard.
-  await expect(page.getByText('ORDER BOOK').first()).toBeVisible({ timeout: 20_000 });
+  await page.goto('/#terminal');
+  await expect(page.getByRole('region', { name: 'ORDER BOOK' })).toBeVisible({ timeout: 20_000 });
 }
 
 test.describe('terminal', () => {
@@ -62,7 +59,9 @@ test.describe('terminal', () => {
     );
 
     const [asks, bids] = prices;
-    if (asks?.length && bids?.length) {
+    expect(asks.length).toBeGreaterThan(0);
+    expect(bids.length).toBeGreaterThan(0);
+    {
       // A crossed book is not a book. This is what a mismatched delta model
       // looked like on screen.
       expect(Math.min(...asks)).toBeGreaterThan(Math.max(...bids));
@@ -109,7 +108,7 @@ test.describe('terminal', () => {
 
     // The toolbar used to sit over a panel container at inset-0, so anything
     // positioned top-right rendered underneath these buttons.
-    const reset = page.getByRole('button', { name: 'Reset' });
+    const reset = page.getByRole('button', { name: 'Reset', exact: true });
     await expect(reset).toBeVisible();
     const box = await reset.boundingBox();
     expect(box).not.toBeNull();
@@ -122,18 +121,11 @@ test.describe('terminal', () => {
     expect(topmost).toBe('Reset');
   });
 
-  test('the footer does not claim LIVE without a socket', async ({ page }) => {
+  test('labels synthetic data and reports transport health separately', async ({ page }) => {
     await enterTerminal(page);
-    await page.waitForTimeout(2500);
-
-    const live = await page.getByText('LIVE', { exact: true }).count();
-    const simulated = await page.getByText('SIMULATED', { exact: true }).count();
-
-    // Exactly one of them, and never LIVE while the latency readout is empty.
-    expect(live + simulated).toBeGreaterThan(0);
-    if (live > 0) {
-      await expect(page.getByTitle('WebSocket round-trip latency')).not.toHaveText('—');
-    }
+    await expect(page.locator('footer')).toContainText('SYNTHETIC');
+    await expect(page.getByTestId('feed-status')).toHaveText('CONNECTED');
+    await expect(page.getByText('LIVE', { exact: true })).toHaveCount(0);
   });
 
   test('chart type switches the series in the default TradingView view', async ({ page }) => {
@@ -208,7 +200,7 @@ test.describe('terminal', () => {
   test('the trades tape fills from the feed and keeps growing', async ({ page }) => {
     await enterTerminal(page);
 
-    const rows = page.locator('text=TRADES').locator('xpath=ancestor::div[contains(@class,"glass-panel")]')
+    const rows = page.getByRole('region', { name: 'TRADES', exact: true })
       .locator('div.grid.grid-cols-\\[auto_auto_auto_auto\\]');
 
     // Backfilled from the snapshot, so it is populated on first paint rather
@@ -241,23 +233,10 @@ test.describe('terminal', () => {
     await expect(settings.getByText(/symbols?$/)).toBeVisible();
   });
 
-  test('positions load and mark to the live price', async ({ page }) => {
+  test('a new paper account starts flat with no invented positions', async ({ page }) => {
     await enterTerminal(page);
-
-    const panel = page.getByText('POSITIONS').first()
-      .locator('xpath=ancestor::div[contains(@class,"glass-panel")]');
-
-    // The book used to be initialised empty and never filled, so this panel
-    // read "No open positions" and +$0.00 P&L permanently.
-    await expect(panel).not.toContainText('No open positions', { timeout: 20_000 });
-    await expect(panel.getByText('AAPL').first()).toBeVisible();
-
-    // P&L is derived from the live quote, so the marks move as the market
-    // does rather than waiting on a server message. Compare the panel's whole
-    // text: row P&L renders without decimals, so targeting a currency pattern
-    // with cents matches nothing and quietly compares null to null.
-    const before = await panel.innerText();
-    await expect.poll(async () => panel.innerText(), { timeout: 20_000 })
-      .not.toBe(before);
+    const panel = page.getByRole('region', { name: 'POSITIONS & RISK' });
+    await expect(panel).toContainText('No open positions');
+    await expect(panel).toContainText('$100,000.00');
   });
 });
