@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { store } from '@/store/store';
 import { useKeyboard } from '@/hooks/useKeyboard';
@@ -36,9 +36,9 @@ const mount = () => renderHook(() => useKeyboard(), { wrapper });
 const CODES: Record<string, string> = { '?': 'Slash', '/': 'Slash' };
 
 function press(key: string, init: KeyboardEventInit = {}) {
-  document.dispatchEvent(
+  act(() => document.dispatchEvent(
     new KeyboardEvent('keydown', { key, code: CODES[key], bubbles: true, ...init }),
-  );
+  ));
 }
 
 beforeEach(() => {
@@ -105,14 +105,14 @@ describe('the advertised shortcuts are real', () => {
     expect(store.getState().market.currentPhase).toBe('pre-market');
   });
 
-  it('cycles phase on Tab, as advertised', () => {
+  it('preserves Tab for normal browser focus navigation', () => {
     mount();
     press('1');
     const before = store.getState().market.currentPhase;
 
     press('Tab');
 
-    expect(store.getState().market.currentPhase).not.toBe(before);
+    expect(store.getState().market.currentPhase).toBe(before);
   });
 
   it('groups every shortcut under a titled section', () => {

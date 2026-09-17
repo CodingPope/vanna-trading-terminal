@@ -95,6 +95,12 @@ function bookEntry(price: number) {
   return [{ price, size: 10, total: 10, side: 'bid' as const }];
 }
 
+function validQuote(symbol: string, price: number) {
+  return { symbol, price: price + 1, timestamp: 1700000000000, change: 0, changePercent: 0,
+    volume: 100, high: price + 2, low: price + 0.5, open: price + 1, close: price + 1,
+    bid: price + 0.99, ask: price + 1.01, bidSize: 100, askSize: 100 };
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   FakeWebSocket.instances = [];
@@ -360,7 +366,7 @@ describe('behaviour under a message burst', () => {
 
     // 500 ticks for AAPL inside a single frame.
     for (let i = 0; i < 500; i++) {
-      ws.push({ type: 'market_data', data: { symbol: 'AAPL', price: 100 + i, timestamp: i } });
+      ws.push({ type: 'market_data', data: validQuote('AAPL', 100 + i) });
     }
 
     // Nothing written yet — MarketDataHandler batches per animation frame.
@@ -383,7 +389,7 @@ describe('behaviour under a message burst', () => {
 
     // 600 distinct symbols inside one frame, against a 250 capacity.
     for (let i = 0; i < 600; i++) {
-      ws.push({ type: 'market_data', data: { symbol: `SYM${i}`, price: i, timestamp: i } });
+      ws.push({ type: 'market_data', data: validQuote(`SYM${i}`, i) });
     }
     vi.advanceTimersByTime(16);
 
@@ -403,7 +409,7 @@ describe('behaviour under a message burst', () => {
 
     // 200 deltas — inside the 250 capacity — buried in 900 market data ticks.
     for (let i = 0; i < 900; i++) {
-      ws.push({ type: 'market_data', data: { symbol: `SYM${i}`, price: i, timestamp: i } });
+      ws.push({ type: 'market_data', data: validQuote(`SYM${i}`, i) });
       if (i < 200) {
         ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: i + 2, data: bookEntry(100 + i) });
       }
@@ -423,7 +429,7 @@ describe('behaviour under a message burst', () => {
     client.destroy();
   });
 
-  it('detects the loss on the next message when even high-priority overflows', () => {
+  it('immediately requests recovery when critical messages overflow', () => {
     const { client } = makeClient();
     const ws = latest();
     ws.accept();
@@ -439,16 +445,9 @@ describe('behaviour under a message burst', () => {
 
     expect(client.droppedMessages).toBeGreaterThan(0);
 
-    // Note *where* the loss lands: the queue evicts what is arriving, so it
-    // keeps a contiguous run from the start and everything dropped is at the
-    // tail. There is no hole to spot yet — the book has simply stopped, which
-    // is why nothing has been re-requested at this point.
-    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
+    // Recovery is immediate, deduplicated, and blocks queued stale deltas.
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(1);
 
-    // The loss only becomes visible when the stream resumes, and then sequence
-    // validation catches it: backpressure could not save the book, so the
-    // layer beneath it refuses the delta and asks for a fresh snapshot rather
-    // than letting a hole through.
     ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 500, data: bookEntry(999) });
     flush();
 
@@ -456,6 +455,29 @@ describe('behaviour under a message burst', () => {
     expect(resubscribes).toHaveLength(1);
     expect(resubscribes[0]).toMatchObject({ symbol: 'AAPL', requestSnapshot: true });
 
+    client.destroy();
+  });
+});
+
+describe('unhealthy feed protection', () => {
+  it('rejects malformed data before touching market state', () => {
+    const { client, dispatch } = makeClient();
+    latest().accept();
+    latest().push({ type: 'market_data', data: { symbol: 'AAPL', price: 'broken' } });
+    flush();
+    const calls = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some(c => c[0].type.includes('batchUpdateMarketData'))).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(calls.some(c => c[0].type.includes('setDiagnostics') && c[0].payload.invalid === 1)).toBe(true);
+    client.destroy();
+  });
+  it('disconnects and invalidates account state when heartbeat replies stop', () => {
+    const { client, dispatch } = makeClient();
+    latest().accept();
+    vi.advanceTimersByTime(45000);
+    const calls = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some(c => c[0].type === 'paper/invalidateAccount')).toBe(true);
+    expect(calls.some(c => c[0].type === 'market/setConnected' && c[0].payload === false)).toBe(true);
     client.destroy();
   });
 });

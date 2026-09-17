@@ -64,16 +64,17 @@ export const useUIStore = create<UIStoreState>()(
   persist(
     (set, get) => ({
       // Navigation
-      currentView: 'landing',
+      currentView: window.location.hash === '#terminal' ? 'dashboard' : 'landing',
       setView: (view) => set({ currentView: view }),
       enterDashboard: () => {
-        set({ isLoading: true, loadingMessage: 'Initializing trading terminal...' });
-        setTimeout(() => {
-          set({ currentView: 'dashboard', isLoading: false, loadingMessage: '' });
-          get().addNotification({ type: 'success', message: 'Welcome to VANNA Trading Terminal' });
-        }, 1500);
+        window.location.hash = 'terminal';
+        set({ currentView: 'dashboard', isLoading: false, loadingMessage: '' });
+        get().addNotification({ type: 'success', message: 'Welcome to VANNA Trading Terminal' });
       },
-      goToLanding: () => set({ currentView: 'landing' }),
+      goToLanding: () => {
+        history.replaceState(null, '', window.location.pathname);
+        set({ currentView: 'landing' });
+      },
 
       // Modals
       showCommandPalette: false,
@@ -102,10 +103,8 @@ export const useUIStore = create<UIStoreState>()(
       settings: {
         highContrastMode: false,
         orbScope: 'market',
-        soundEnabled: true,
         notificationsEnabled: true,
         defaultTimeframe: '5m',
-        riskPerTrade: 1,
       },
       updateSettings: (s) => set(state => ({ settings: { ...state.settings, ...s } })),
 

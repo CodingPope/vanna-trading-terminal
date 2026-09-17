@@ -1,240 +1,268 @@
-"""
-VANNA market data server.
-
-Serves the two halves of snapshot-then-delta:
-
-  GET  /api/snapshot   full state plus the sequence each symbol is at
-  WS   /ws             the delta stream that continues from those sequences
-
-The sequence handoff is the whole contract. A client that applies deltas
-without knowing where the snapshot left off cannot tell a gap from a fresh
-start, and a book that has silently missed an update is worse than no book —
-it looks right and prices wrong.
-"""
+"""One shared market clock, isolated paper accounts, same-origin HTTP/WebSocket API."""
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
-import logging
-from typing import Dict, List, Optional, Set
+import os
+import time
+from contextlib import asynccontextmanager
+from typing import Dict, List, Literal, Optional, Set
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
-from .models import (
-    ClientMessage,
-    MarketDataMessage,
-    TradeMessage,
-    OrderBookDeltaMessage,
-    OrderBookSnapshotMessage,
-    PongMessage,
-    SnapshotResponse,
-)
+from .models import ClientMessage, SnapshotResponse
+from .paper import AmendRequest, OrderRequest, PaperAccount, PaperError
 from .replay import ReplayEngine
 
-log = logging.getLogger("vanna")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-
-app = FastAPI(title="VANNA market data", version="0.1.0")
-
-# The browser bundle is served by nginx on a different origin in the compose
-# setup, and from the Vite dev server locally.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 engine = ReplayEngine()
-
-#: Wall-clock gap between emitted ticks at 1x. The client batches to an
-#: animation frame anyway, so pushing faster than this buys nothing until the
-#: speed multiplier is turned up deliberately.
-BASE_TICK_INTERVAL = 0.1
+accounts: Dict[str, PaperAccount] = {}
+BASE_TICK_INTERVAL = 0.1  # accelerated replay: one simulated second per 100ms
 
 
-@app.get("/api/health")
-async def health() -> Dict[str, object]:
-    return {
-        "status": "ok",
-        "mode": "replay" if engine.is_replay else "synthetic",
-        "sessionDate": engine.session_date,
-        "symbols": len(engine.symbols),
-    }
+def account_for(session: str) -> PaperAccount:
+    now = time.monotonic()
+    for key, account in list(accounts.items()):
+        if now - account.last_seen > 21600 and not any(c.session == key for c in hub.clients):
+            del accounts[key]
+    if session not in accounts:
+        if len(accounts) >= 1000:
+            raise HTTPException(503, "Demo capacity reached; retry later")
+        accounts[session] = PaperAccount()
+    accounts[session].last_seen = now
+    return accounts[session]
 
 
-@app.get("/api/snapshot", response_model=SnapshotResponse)
-async def snapshot(symbols: str = Query(default="")) -> SnapshotResponse:
-    """
-    Full state for the requested symbols, or everything if unspecified.
-
-    Returned before the socket starts applying deltas — an order book cannot be
-    rebuilt from an update stream alone, because deltas describe change against
-    a state you are assumed to already hold.
-    """
-    requested = [s for s in symbols.split(",") if s] or engine.symbols
-    known = [s for s in requested if s in engine.states]
-
-    return SnapshotResponse(
-        marketData={s: engine.market_data(s) for s in known},
-        orderBooks={s: engine.order_book(s) for s in known},
-        candlesticks={s: engine.candlesticks(s) for s in known},
-        trades={s: engine.recent_trades(s) for s in known},
-        positions=engine.positions(),
-        sequences={s: engine.sequence(s) for s in known},
-    )
+def quotes():
+    return {s: engine.market_data(s) for s in engine.symbols}
 
 
 class Connection:
-    """One browser tab, and what it has asked to hear about."""
+    def __init__(self, ws: WebSocket, session: Optional[str]):
+        self.ws, self.session = ws, session
+        self.symbols = set(engine.symbols)
+        self.outbox: asyncio.Queue = asyncio.Queue(maxsize=2000)
+        self.skip_symbol = None
+        self.silent_until = 0.0
+        self.overloaded = False
 
-    def __init__(self, ws: WebSocket) -> None:
-        self.ws = ws
-        self.symbols: Set[str] = set(engine.symbols)
-        # Bounded: a client that cannot keep up should lose messages rather
-        # than grow the server's memory without limit. The client detects the
-        # resulting sequence gap and re-snapshots.
-        self.outbox: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=2000)
-
-    async def send(self, payload: object) -> None:
-        await self.ws.send_text(json.dumps(payload))
-
-    def offer(self, payload: dict) -> None:
+    def offer(self, payload):
         try:
             self.outbox.put_nowait(payload)
         except asyncio.QueueFull:
-            pass
+            # Never silently lose account events. Disconnect and recover complete
+            # market/account snapshots on reconnect, rather than growing memory.
+            self.overloaded = True
 
 
 class Hub:
-    """
-    Owns the single session clock and fans its output out to every client.
-
-    The engine used to be advanced by each connection's own loop. Since it is a
-    process-wide singleton, that meant N connected clients advanced the session
-    N times per interval and each incremented the shared per-symbol sequence —
-    so every client saw only a fraction of the sequence numbers, read the rest
-    as gaps, and re-snapshotted continuously while its book decayed. Two browser
-    tabs broke each other.
-
-    There is one market. It ticks once, and everybody watching sees the same
-    stream — which is also the only arrangement in which a sequence number
-    means anything.
-    """
-
-    def __init__(self) -> None:
+    def __init__(self):
         self.clients: Set[Connection] = set()
         self._task: Optional[asyncio.Task] = None
-        self.speed: float = 1.0
 
-    def add(self, conn: Connection) -> None:
+    def add(self, conn):
         self.clients.add(conn)
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run())
 
-    def remove(self, conn: Connection) -> None:
+    def remove(self, conn):
         self.clients.discard(conn)
 
-    def _broadcast(self, payload: dict, symbol: str) -> None:
-        for client in self.clients:
-            if symbol in client.symbols:
-                client.offer(payload)
+    def publish_account(self, session):
+        payload = {"type": "account_snapshot", "data": account_for(session).snapshot()}
+        for conn in self.clients:
+            if conn.session == session:
+                conn.offer(payload)
 
-    async def _run(self) -> None:
+    def _broadcast(self, payload, symbol):
+        for conn in self.clients:
+            if symbol not in conn.symbols or time.monotonic() < conn.silent_until:
+                continue
+            if payload["type"] == "order_book_delta" and conn.skip_symbol == symbol:
+                conn.skip_symbol = None
+                continue
+            conn.offer(payload)
+
+    async def _run(self):
         while True:
-            await asyncio.sleep(BASE_TICK_INTERVAL / max(self.speed, 0.01))
+            await asyncio.sleep(BASE_TICK_INTERVAL)
             if not self.clients:
                 continue
-
             for symbol in engine.symbols:
                 engine.advance(symbol)
-                self._broadcast(
-                    MarketDataMessage(data=engine.market_data(symbol)).model_dump(),
-                    symbol,
-                )
-
+                delta = engine.next_book_delta(symbol)
+                self._broadcast({"type": "order_book_delta", "symbol": symbol,
+                                 "sequence": engine.sequence(symbol), "data": [x.model_dump() for x in delta]}, symbol)
+                self._broadcast({"type": "market_data", "data": engine.market_data(symbol).model_dump()}, symbol)
+                self._broadcast({"type": "candle", "symbol": symbol,
+                                 "data": engine.current_candle(symbol).model_dump()}, symbol)
                 prints = engine.next_trades(symbol)
                 if prints:
-                    self._broadcast(
-                        TradeMessage(symbol=symbol, data=prints).model_dump(),
-                        symbol,
-                    )
-
-                # Book updates are far less frequent than prints in a real feed.
-                if engine.rng.random() < 0.25:
-                    changed = engine.next_book_delta(symbol)
-                    self._broadcast(
-                        OrderBookDeltaMessage(
-                            symbol=symbol,
-                            sequence=engine.sequence(symbol),
-                            data=changed,
-                        ).model_dump(),
-                        symbol,
-                    )
+                    self._broadcast({"type": "trade", "symbol": symbol, "data": [t.model_dump() for t in prints]}, symbol)
+            current_quotes = quotes()
+            for session, account in list(accounts.items()):
+                if account.match(current_quotes):
+                    self.publish_account(session)
+            for conn in list(self.clients):
+                if conn.overloaded:
+                    await conn.ws.close(code=1013, reason="Client backlog; reconnect to resynchronize")
+                    self.remove(conn)
 
 
 hub = Hub()
 
 
-async def _drain(conn: Connection) -> None:
-    """Push whatever the hub has queued for this client."""
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    if hub._task:
+        hub._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hub._task
+
+
+app = FastAPI(title="VANNA paper execution workstation", version="0.2.0", lifespan=lifespan)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "mode": "replay" if engine.is_replay else "synthetic",
+            "sessionDate": engine.session_date, "symbols": len(engine.symbols), "paperOnly": True}
+
+
+@app.get("/api/snapshot", response_model=SnapshotResponse)
+async def snapshot(symbols: str = Query(default="")):
+    known = [s for s in (symbols.split(",") if symbols else engine.symbols) if s in engine.states]
+    # No awaits or random draws between fields: one coherent, read-only image.
+    return SnapshotResponse(marketData={s: engine.market_data(s) for s in known},
+                            orderBooks={s: engine.order_book(s) for s in known},
+                            candlesticks={s: engine.candlesticks(s, 500) for s in known},
+                            trades={s: engine.recent_trades(s) for s in known}, positions=[],
+                            sequences={s: engine.sequence(s) for s in known},
+                            source="replay" if engine.is_replay else "synthetic", sessionDate=engine.session_date)
+
+
+SESSION_PATTERN = r"^[a-zA-Z0-9_-]{16,80}$"
+
+
+@app.get("/api/paper")
+async def paper_snapshot(x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    return account_for(x_paper_session).snapshot()
+
+
+def mutate(session, operation):
+    account = account_for(session)
+    try:
+        operation(account)
+    except PaperError as exc:
+        raise HTTPException(exc.status, exc.message) from exc
+    hub.publish_account(session)
+    return account.snapshot()
+
+
+@app.post("/api/paper/orders")
+async def submit_order(request: OrderRequest, x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    return mutate(x_paper_session, lambda a: a.submit(request, quotes()))
+
+
+@app.delete("/api/paper/orders/{order_id}")
+async def cancel_order(order_id: str, x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    return mutate(x_paper_session, lambda a: a.cancel(order_id))
+
+
+@app.patch("/api/paper/orders/{order_id}")
+async def amend_order(order_id: str, request: AmendRequest, x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    return mutate(x_paper_session, lambda a: a.amend(order_id, request, quotes()))
+
+
+@app.post("/api/paper/cancel-all")
+async def cancel_all(x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    return mutate(x_paper_session, lambda a: a.cancel_all())
+
+
+class PaperControl(BaseModel):
+    action: Literal["pause", "resume", "reset"]
+
+
+@app.post("/api/paper/control")
+async def paper_control(request: PaperControl, x_paper_session: str = Header(pattern=SESSION_PATTERN)):
+    def change(account):
+        if request.action == "reset":
+            epoch, revision = account.epoch, account.revision
+            account.__init__()
+            account.epoch, account.revision = epoch, revision + 1
+        else:
+            account.paused = request.action == "pause"
+            account.revision += 1
+    return mutate(x_paper_session, change)
+
+
+def prime(conn):
+    for symbol in conn.symbols:
+        conn.offer({"type": "order_book_snapshot", "symbol": symbol,
+                    "sequence": engine.sequence(symbol), "data": [e.model_dump() for e in engine.order_book(symbol)]})
+        conn.offer({"type": "candle_snapshot", "symbol": symbol,
+                    "data": [c.model_dump() for c in engine.candlesticks(symbol, 500)]})
+    if conn.session:
+        conn.offer({"type": "account_snapshot", "data": account_for(conn.session).snapshot()})
+
+
+async def drain(conn):
     while True:
-        payload = await conn.outbox.get()
-        await conn.send(payload)
-
-
-async def _send_snapshot(conn: Connection, symbol: str) -> None:
-    await conn.send(
-        OrderBookSnapshotMessage(
-            symbol=symbol,
-            sequence=engine.sequence(symbol),
-            data=engine.resnapshot(symbol),
-        ).model_dump()
-    )
+        await conn.ws.send_text(json.dumps(await conn.outbox.get()))
 
 
 @app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket) -> None:
+async def ws_endpoint(ws: WebSocket, session: Optional[str] = Query(default=None, pattern=SESSION_PATTERN)):
+    # Same-origin browsers only. Local scripts may omit Origin.
+    origin = ws.headers.get("origin")
+    allowed = os.getenv("VANNA_ORIGIN")
+    if origin and origin not in {allowed, f"http://{ws.headers.get('host')}", f"https://{ws.headers.get('host')}"}:
+        await ws.close(code=1008)
+        return
     await ws.accept()
-    conn = Connection(ws)
-    log.info("client connected")
-
-    # Lead with a snapshot per symbol so the client has a base to apply
-    # deltas against, then start streaming.
-    for symbol in conn.symbols:
-        await _send_snapshot(conn, symbol)
-
+    conn = Connection(ws, session)
+    prime(conn)
     hub.add(conn)
-    pump = asyncio.create_task(_drain(conn))
-
+    pump = asyncio.create_task(drain(conn))
     try:
         while True:
             raw = await ws.receive_text()
             try:
                 msg = ClientMessage.model_validate_json(raw)
             except ValueError:
-                log.warning("unparseable client frame")
+                conn.offer({"type": "error", "data": {"message": "Invalid client message"}})
                 continue
-
+            if session:
+                account_for(session)
             if msg.type == "ping":
-                await conn.send(PongMessage().model_dump())
-
-            elif msg.type == "subscribe":
-                # The client asks for this after detecting a sequence gap. It
-                # is the recovery path: rather than trying to patch a book with
-                # a hole in it, it throws the book away and asks for a new one.
-                if msg.symbol and msg.symbol in engine.states:
-                    if msg.requestSnapshot:
-                        log.info("re-snapshot requested for %s", msg.symbol)
-                        await _send_snapshot(conn, msg.symbol)
-                    conn.symbols.add(msg.symbol)
-
+                conn.offer({"type": "pong", "data": None})
+            elif msg.type == "subscribe" and msg.symbol in engine.states:
+                symbol = msg.symbol
+                conn.symbols.add(symbol)
+                if msg.requestSnapshot:
+                    conn.offer({"type": "order_book_snapshot", "symbol": symbol,
+                                "sequence": engine.sequence(symbol), "data": [e.model_dump() for e in engine.order_book(symbol)]})
+            elif msg.type == "demo" and isinstance(msg.data, dict):
+                action = msg.data.get("action")
+                if action == "disconnect":
+                    await ws.close(code=1012, reason="Demo disconnect")
+                    break
+                if action == "gap":
+                    conn.skip_symbol = msg.symbol if msg.symbol in engine.states else "AAPL"
+                elif action == "stale":
+                    conn.silent_until = time.monotonic() + 6
+                elif action == "invalid":
+                    conn.offer({"type": "market_data", "data": {"price": "invalid"}})
+                elif action == "burst":
+                    quote = engine.market_data("AAPL").model_dump()
+                    # Bounded per-client burst. No shared market clock mutation.
+                    conn.offer({"type": "burst", "data": [quote] * 1000})
     except WebSocketDisconnect:
-        log.info("client disconnected")
+        pass
     finally:
         hub.remove(conn)
         pump.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
+        with contextlib.suppress(asyncio.CancelledError, WebSocketDisconnect, RuntimeError):
             await pump

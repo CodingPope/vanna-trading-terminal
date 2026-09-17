@@ -12,8 +12,10 @@
  * simulation. That keeps the app runnable standalone, which matters for a
  * deployed demo where the front end may be the only thing running.
  */
+import { paperSession } from '@/services/paper';
+import { registerFeed } from '@/services/feedControl';
 import type { AppDispatch } from './store';
-import { batchUpdateMarketData, updateCandlesticks, setConnected } from './slices/marketSlice';
+import { batchUpdateMarketData, updateCandlesticks, setConnected, setSourceMode } from './slices/marketSlice';
 import { setOrderBook } from './slices/orderBookSlice';
 import { setFocusList, setPositions } from './slices/positionsSlice';
 import { setTrades } from './slices/tradesSlice';
@@ -29,7 +31,7 @@ export interface LiveFeedHandle {
 /** Same-origin by default: nginx proxies /api and /ws to the market data service. */
 function socketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws`;
+  return `${protocol}//${window.location.host}/ws?session=${paperSession()}`;
 }
 
 /**
@@ -46,6 +48,7 @@ export async function startLiveFeed(
 ): Promise<LiveFeedHandle | null> {
   const snapshot = await new SnapshotService().fetchSnapshot(symbols);
   if (!snapshot) return null;
+  dispatch(setSourceMode(snapshot.source));
 
   // Hydrate from the snapshot before a single delta is applied.
   const quotes = Object.values(snapshot.marketData ?? {});
@@ -76,15 +79,17 @@ export async function startLiveFeed(
     dispatch(setFocusList(generateInitialFocusList(snapshot.marketData)));
   }
 
-  const client = new WebSocketClient({ url: socketUrl(), dispatch });
+  const client = new WebSocketClient({ url: socketUrl(), dispatch, heartbeatIntervalMs: 3000 });
   // Adopt the snapshot's sequences *before* connecting, so no delta can arrive
   // against an unseeded handler.
   client.seedSequences(snapshot.sequences ?? {});
+  registerFeed(client);
   client.connect();
 
   return {
     client,
     stop: () => {
+      registerFeed(null);
       client.destroy();
       dispatch(setConnected(false));
     },

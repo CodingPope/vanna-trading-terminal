@@ -21,17 +21,13 @@
  */
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useUIStore } from '@/store/uiStore';
-import { useAppSelector, useMarketActions } from '@/store/hooks';
-import { selectCurrentPhase } from '@/store/selectors';
-import type { TradingPhase } from '@/types';
+import { useMarketActions } from '@/store/hooks';
 
-const PHASES: TradingPhase['id'][] = ['pre-market', 'open', 'midday', 'power-hour'];
 
 export function useKeyboard(): void {
   const toggleCommandPalette = useUIStore(s => s.toggleCommandPalette);
   const toggleKeyboardShortcuts = useUIStore(s => s.toggleKeyboardShortcuts);
   const closeAllModals = useUIStore(s => s.closeAllModals);
-  const currentPhase = useAppSelector(selectCurrentPhase);
   const { setPhase } = useMarketActions();
 
   // F5 — prevent accidental page refresh during live trading
@@ -42,17 +38,6 @@ export function useKeyboard(): void {
   useHotkeys('2', () => setPhase('open'));
   useHotkeys('3', () => setPhase('midday'));
   useHotkeys('4', () => setPhase('power-hour'));
-
-  // Tab — cycle to next phase
-  useHotkeys(
-    'tab',
-    (e) => {
-      e.preventDefault();
-      const idx = PHASES.indexOf(currentPhase);
-      setPhase(PHASES[(idx + 1) % PHASES.length]);
-    },
-    { preventDefault: true },
-  );
 
   // / — focus the focus-list search input
   useHotkeys(

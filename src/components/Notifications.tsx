@@ -5,18 +5,17 @@ import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from 'lucide-react'
 export function Notifications() {
   const notifications = useUIStore(s => s.notifications);
   const removeNotification = useUIStore(s => s.removeNotification);
+  const enabled = useUIStore(s => s.settings.notificationsEnabled);
 
   // Auto-dismiss notifications after 5 seconds
   useEffect(() => {
-    notifications.forEach(notification => {
-      const timeout = setTimeout(() => {
-        removeNotification(notification.id);
-      }, 5000);
-      return () => clearTimeout(timeout);
-    });
+    const timeouts = notifications.map(notification => setTimeout(() => {
+      removeNotification(notification.id);
+    }, 5000));
+    return () => timeouts.forEach(clearTimeout);
   }, [notifications, removeNotification]);
 
-  if (notifications.length === 0) return null;
+  if (!enabled || notifications.length === 0) return null;
 
   const getIcon = (type: string) => {
     switch (type) {

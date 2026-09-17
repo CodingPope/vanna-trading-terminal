@@ -3,6 +3,7 @@
  * Types are derived via z.infer so they stay in sync with schemas automatically.
  */
 import { z } from 'zod';
+import { PaperAccountSchema } from './paper';
 
 // ── Market Data ───────────────────────────────────────────────────────────────
 export const MarketDataSchema = z.object({
@@ -76,13 +77,32 @@ export const PositionSchema = z.object({
   pnlPercent: z.number(),
 });
 
+export const CandleSchema = z.object({
+  time: z.number().positive(), open: z.number().positive(), high: z.number().positive(),
+  low: z.number().positive(), close: z.number().positive(), volume: z.number().nonnegative(),
+});
+export const SnapshotSchema = z.object({
+  marketData: z.record(z.string(), MarketDataSchema),
+  orderBooks: z.record(z.string(), z.array(OrderBookEntrySchema)),
+  candlesticks: z.record(z.string(), z.array(CandleSchema)).optional(),
+  trades: z.record(z.string(), z.array(TradeSchema)).optional(),
+  positions: z.array(PositionSchema).optional(),
+  sequences: z.record(z.string(), z.number().int().nonnegative()),
+  source: z.enum(['synthetic', 'replay']).default('synthetic'),
+  sessionDate: z.string().nullable().optional(),
+});
+
 // ── WebSocket messages (discriminated union on `type`) ────────────────────────
 const WsBase = { symbol: z.string().optional(), sequence: z.number().optional(), requestSnapshot: z.boolean().optional() };
 
 export const WsMessageSchema = z.discriminatedUnion('type', [
   z.object({ ...WsBase, type: z.literal('market_data'), data: MarketDataSchema }),
-  z.object({ ...WsBase, type: z.literal('order_book_snapshot'), symbol: z.string(), sequence: z.number(), data: z.array(OrderBookEntrySchema) }),
-  z.object({ ...WsBase, type: z.literal('order_book_delta'), symbol: z.string(), sequence: z.number(), data: z.array(OrderBookEntrySchema) }),
+  z.object({ type: z.literal('account_snapshot'), data: PaperAccountSchema }),
+  z.object({ type: z.literal('candle'), symbol: z.string(), data: CandleSchema }),
+  z.object({ type: z.literal('candle_snapshot'), symbol: z.string(), data: z.array(CandleSchema) }),
+  z.object({ type: z.literal('burst'), data: z.array(MarketDataSchema).max(1000) }),
+  z.object({ ...WsBase, type: z.literal('order_book_snapshot'), symbol: z.string(), sequence: z.number().int().nonnegative(), data: z.array(OrderBookEntrySchema) }),
+  z.object({ ...WsBase, type: z.literal('order_book_delta'), symbol: z.string(), sequence: z.number().int().nonnegative(), data: z.array(OrderBookEntrySchema) }),
   z.object({ ...WsBase, type: z.literal('position_update'), data: PositionSchema }),
   z.object({ ...WsBase, type: z.literal('trade'), symbol: z.string(), data: z.array(TradeSchema) }),
   z.object({ ...WsBase, type: z.literal('ping'), data: z.null() }),

@@ -3,6 +3,11 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+const target = process.env.VANNA_API_TARGET ?? 'http://127.0.0.1:8000';
+const proxy = {
+  '/api': { target, changeOrigin: true },
+  '/ws': { target, ws: true },
+};
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
@@ -18,11 +23,9 @@ export default defineConfig({
     // fetch 404s against the dev server and the app silently falls back to the
     // simulation, which looks identical until you check which prices you are
     // looking at.
-    proxy: {
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/ws': { target: 'ws://127.0.0.1:8000', ws: true },
-    },
+    proxy,
   },
+  preview: { proxy },
   test: {
     environment: 'jsdom',
     globals: true,

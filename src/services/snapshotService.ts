@@ -1,13 +1,6 @@
-import type { MarketData, OrderBookEntry, CandlestickData, Trade, Position } from '@/types';
-
-interface SnapshotResponse {
-  marketData: Record<string, MarketData>;
-  orderBooks: Record<string, OrderBookEntry[]>;
-  candlesticks?: Record<string, CandlestickData[]>;
-  trades?: Record<string, Trade[]>;
-  positions?: Position[];
-  sequences: Record<string, number>;
-}
+import { SnapshotSchema } from '@/schemas';
+import type { z } from 'zod';
+type SnapshotResponse = z.infer<typeof SnapshotSchema>;
 
 /**
  * Fetches a full market data snapshot from the REST API before WebSocket deltas begin.
@@ -25,7 +18,7 @@ export class SnapshotService {
       const url = `${this.baseUrl}/snapshot?symbols=${symbols.join(',')}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) throw new Error(`Snapshot HTTP ${res.status}`);
-      return await res.json() as SnapshotResponse;
+      return SnapshotSchema.parse(await res.json());
     } catch (err) {
       // Expected in demo/dev mode without a backend
       console.info('[Snapshot] No backend available, using mock data:', (err as Error).message);

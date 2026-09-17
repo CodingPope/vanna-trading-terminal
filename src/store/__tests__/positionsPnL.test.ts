@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { configureStore } from '@reduxjs/toolkit';
+import paperReducer from '../slices/paperSlice';
 import marketReducer, { batchUpdateMarketData } from '../slices/marketSlice';
 import positionsReducer, { setPositions } from '../slices/positionsSlice';
 import orderBookReducer from '../slices/orderBookSlice';
@@ -21,6 +22,7 @@ function makeStore() {
   return configureStore({
     reducer: {
       market: marketReducer,
+      paper: paperReducer,
       positions: positionsReducer,
       orderBook: orderBookReducer,
       panels: panelsReducer,

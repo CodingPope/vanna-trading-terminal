@@ -35,7 +35,6 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Navigation',
     shortcuts: [
       { keys: '1 – 4', description: 'Jump to trading phase', scope: 'global' },
-      { keys: 'Tab', description: 'Cycle to next trading phase', scope: 'global' },
       { keys: 'J', description: 'Move down the focus list', scope: 'focus-list' },
       { keys: 'K', description: 'Move up the focus list', scope: 'focus-list' },
     ],
