@@ -6,6 +6,7 @@ import positionsReducer, { setPositions } from '../slices/positionsSlice';
 import orderBookReducer from '../slices/orderBookSlice';
 import panelsReducer from '../slices/panelsSlice';
 import tradesReducer from '../slices/tradesSlice';
+import replayReducer from '../slices/replaySlice';
 import { selectPositionsWithPnL, selectUnrealizedPnL } from '../selectors';
 import type { MarketData, Position } from '@/types';
 
@@ -27,6 +28,7 @@ function makeStore() {
       orderBook: orderBookReducer,
       panels: panelsReducer,
       trades: tradesReducer,
+      replay: replayReducer,
     },
   });
 }

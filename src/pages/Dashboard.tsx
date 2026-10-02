@@ -1,17 +1,16 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { DEFAULT_PANELS } from '@/store/slices/panelsSlice';
 import { useAppSelector, useMarketActions, useWorkspaceActions } from '@/store/hooks';
 import { selectPanels, selectWorkspaces, selectCurrentWorkspaceId } from '@/store/selectors';
 import { Header } from '@/components/Header';
+import { ReplayBar } from '@/components/ReplayBar';
 import { StatsFooter } from '@/components/StatsFooter';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { CommandPalette } from '@/components/CommandPalette';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Notifications } from '@/components/Notifications';
 import { WatchlistPanel } from '@/components/panels/WatchlistPanel';
-import { ChartPanel } from '@/components/panels/ChartPanel';
-import { OrderBookPanel } from '@/components/panels/OrderBookPanel';
 import { PositionsPanel } from '@/components/panels/PositionsPanel';
 import { AnaPanel } from '@/components/panels/AnaPanel';
 import { FocusListPanel } from '@/components/panels/FocusListPanel';
@@ -19,12 +18,26 @@ import { MorningBriefPanel } from '@/components/panels/MorningBriefPanel';
 import { TickerPanel } from '@/components/panels/TickerPanel';
 import { TradesPanel } from '@/components/panels/TradesPanel';
 import { DepthPanel } from '@/components/panels/DepthPanel';
-import { DepthChartPanel } from '@/components/panels/DepthChartPanel';
 import { OrderEntryPanel } from '@/components/panels/OrderEntryPanel';
 import { OrdersPanel } from '@/components/panels/OrdersPanel';
 import { DiagnosticsPanel } from '@/components/panels/DiagnosticsPanel';
 import { PanelBoundary } from '@/components/PanelBoundary';
 import type { Panel } from '@/types';
+
+// One heavy visualization library each — AG Grid, Lightweight Charts, Recharts.
+// Loading them with the route puts about 300 kB of gzipped JavaScript in front
+// of first paint for panels a reviewer may never scroll to, so each arrives
+// when its panel does. Measured weights are in dist/bundle-analysis.json.
+const ChartPanel = lazy(() => import('@/components/panels/ChartPanel')
+  .then(m => ({ default: m.ChartPanel })));
+const OrderBookPanel = lazy(() => import('@/components/panels/OrderBookPanel')
+  .then(m => ({ default: m.OrderBookPanel })));
+const DepthChartPanel = lazy(() => import('@/components/panels/DepthChartPanel')
+  .then(m => ({ default: m.DepthChartPanel })));
+
+function PanelLoading() {
+  return <p role="status" className="p-3 text-xs text-vanna-text-secondary">Loading panel…</p>;
+}
 
 // Panel component mapping
 // Panels are rendered without props; every prop any of them accepts is optional.
@@ -240,6 +253,7 @@ export function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-vanna-bg">
       <Header />
+      <ReplayBar />
       
       {/* Main content area */}
       <main className="flex-1 relative overflow-hidden">
@@ -302,7 +316,7 @@ export function Dashboard() {
             if (layoutMode === 'grid') return (
               <section key={panel.id} aria-label={panel.title} className={`glass-panel min-w-0 flex flex-col overflow-hidden desk-panel-${panel.id}`}>
                 <div className="px-3 py-2 text-[11px] font-semibold tracking-wider border-b border-white/10 text-vanna-text-secondary">{panel.title}</div>
-                <div className="flex-1 min-h-0 overflow-hidden"><PanelBoundary><PanelComponent /></PanelBoundary></div>
+                <div className="flex-1 min-h-0 overflow-hidden"><PanelBoundary><Suspense fallback={<PanelLoading />}><PanelComponent /></Suspense></PanelBoundary></div>
               </section>
             );
             const displayPanel = panel;
@@ -315,7 +329,7 @@ export function Dashboard() {
                 canDrag={layoutMode === 'free'}
                 canResize={layoutMode === 'free'}
               >
-                <PanelBoundary><PanelComponent /></PanelBoundary>
+                <PanelBoundary><Suspense fallback={<PanelLoading />}><PanelComponent /></Suspense></PanelBoundary>
               </DraggablePanel>
             );
           })}

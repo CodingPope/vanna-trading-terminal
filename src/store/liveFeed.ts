@@ -19,6 +19,7 @@ import { batchUpdateMarketData, updateCandlesticks, setConnected, setSourceMode 
 import { setOrderBook } from './slices/orderBookSlice';
 import { setFocusList, setPositions } from './slices/positionsSlice';
 import { setTrades } from './slices/tradesSlice';
+import { receiveStatus } from './slices/replaySlice';
 import { generateInitialFocusList } from './mockData';
 import { WebSocketClient } from '@/services/websocket';
 import { SnapshotService } from '@/services/snapshotService';
@@ -49,6 +50,9 @@ export async function startLiveFeed(
   const snapshot = await new SnapshotService().fetchSnapshot(symbols);
   if (!snapshot) return null;
   dispatch(setSourceMode(snapshot.source));
+  // Playback state rides in on hydration, so the controls are never briefly
+  // rendered from a guess while waiting for the first status frame.
+  if (snapshot.replay) dispatch(receiveStatus(snapshot.replay));
 
   // Hydrate from the snapshot before a single delta is applied.
   const quotes = Object.values(snapshot.marketData ?? {});

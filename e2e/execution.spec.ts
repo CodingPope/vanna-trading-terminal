@@ -75,6 +75,47 @@ test('two browser accounts cannot see each other’s paper orders', async ({ bro
   } finally { await a.close(); await b.close(); }
 });
 
+test('replay state survives a disconnect by coming back from the server', async ({ page }) => {
+  await enter(page);
+  const state = page.getByTestId('replay-state');
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await expect(state).toHaveText('Paused');
+
+  await page.getByRole('button', { name: 'Disconnect feed' }).click();
+  // While the socket is down the bar says so rather than showing stale controls.
+  await expect(state).toContainText('Reconnecting');
+
+  // Back on the wire, and reading PAUSED rather than STALE: a replay that was
+  // stopped on purpose is not an unhealthy feed, and must not gate order entry.
+  await expect(page.getByTestId('feed-status')).toHaveText('PAUSED');
+  await expect(page.getByRole('button', { name: 'Submit paper order' })).toBeEnabled();
+  // Still paused, because the server says so — not because the client remembered.
+  await expect(state).toHaveText('Paused');
+  const clock = page.getByTestId('replay-clock');
+  const held = await clock.textContent();
+  await page.waitForTimeout(2000);
+  await expect(clock).toHaveText(held ?? '');
+});
+
+test('two browser sessions replay independently', async ({ browser }) => {
+  const a = await browser.newContext(), b = await browser.newContext();
+  try {
+    const one = await a.newPage(), two = await b.newPage();
+    await enter(one); await enter(two);
+
+    await one.getByRole('button', { name: 'Pause replay' }).click();
+    await expect(one.getByTestId('replay-state')).toHaveText('Paused');
+    const held = await one.getByTestId('replay-clock').textContent();
+
+    // The other session never stopped, and its clock proves it.
+    const running = two.getByTestId('replay-clock');
+    const before = await running.textContent();
+    await expect.poll(async () => running.textContent(), { timeout: 15_000 }).not.toBe(before);
+    await expect(two.getByTestId('replay-state')).toContainText('Playing');
+    await expect(one.getByTestId('replay-clock')).toHaveText(held ?? '');
+  } finally { await a.close(); await b.close(); }
+});
+
 test('Tab advances focus without changing phase and laptop panels do not overflow horizontally', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await enter(page);

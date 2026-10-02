@@ -80,8 +80,7 @@ export function DepthChartPanel({ symbol: propSymbol }: { symbol?: string }) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-        <span className="header-caps">Depth Chart</span>
+      <div className="flex items-center justify-end px-3 py-2 border-b border-white/5">
         <span className="font-mono text-xs text-vanna-text">{symbol}</span>
       </div>
 

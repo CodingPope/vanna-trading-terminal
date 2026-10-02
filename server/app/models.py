@@ -10,9 +10,10 @@ Typing stays Python 3.9-compatible (Optional[X] rather than X | None) so the
 server runs on the system interpreter as well as the 3.12 container.
 """
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer
+from typing_extensions import Annotated
 
 
 class Side(str, Enum):
@@ -56,7 +57,7 @@ class Trade(BaseModel):
     symbol: str
     price: float = Field(gt=0)
     size: float = Field(gt=0)
-    side: Literal["buy", "sell"]
+    side: Literal["buy", "sell", "unknown"]
     timestamp: float = Field(gt=0)
 
 
@@ -124,6 +125,98 @@ class TradeMessage(BaseModel):
     data: List[Trade]
 
 
+# ── Replay control protocol ──────────────────────────────────────────────────
+# Documented in docs/PROTOCOL.md. The version is carried on every status frame
+# so a client can refuse a server it does not understand instead of guessing.
+
+REPLAY_PROTOCOL_VERSION = 1
+
+
+def _nanoseconds(value):
+    if isinstance(value, str):
+        if not value.isdigit():
+            raise ValueError("Nanosecond timestamps must be decimal digits")
+        return int(value)
+    return value
+
+
+#: A nanosecond epoch does not survive JSON: it needs 61 bits and an IEEE-754
+#: double carries 53, so 2026-09-17T00:00:00Z would arrive rounded to the
+#: nearest ~256ns. Replay time therefore crosses the wire as a decimal string
+#: and stays an exact integer on both sides.
+NanoTimestamp = Annotated[int, BeforeValidator(_nanoseconds), PlainSerializer(str, return_type=str)]
+#: "max" is not a rate. It means: ignore event-time pacing and drain up to the
+#: server's per-turn budget of replay units. See docs/PROTOCOL.md.
+REPLAY_SPEEDS: List[Union[float, Literal["max"]]] = [0.5, 1.0, 2.0, 5.0, "max"]
+
+def _speed(value):
+    # Pydantic would happily read `true` as 1.0. A boolean speed is a client bug.
+    if isinstance(value, bool):
+        raise ValueError('speed must be a number or "max"')
+    return value
+
+
+ReplayAction = Literal["play", "pause", "speed", "step", "seek", "reset"]
+ReplaySpeed = Annotated[Union[float, Literal["max"]], BeforeValidator(_speed)]
+
+
+class ReplayStatus(BaseModel):
+    """Authoritative playback state. The client renders this; it never infers it."""
+
+    protocolVersion: int = REPLAY_PROTOCOL_VERSION
+    fixtureId: str
+    mode: Literal["synthetic", "replay", "recorded"]
+    #: What one step advances: a normalized source event, or one synthetic tick.
+    unit: Literal["event", "tick"]
+    eventTimeNs: NanoTimestamp = Field(ge=0)
+    startNs: NanoTimestamp = Field(ge=0)
+    endNs: NanoTimestamp = Field(ge=0)
+    speed: ReplaySpeed
+    speeds: List[ReplaySpeed] = Field(default_factory=lambda: list(REPLAY_SPEEDS))
+    playing: bool
+    ended: bool
+    #: Replay units applied since this generation began. Not an event sequence.
+    sequence: int = Field(ge=0)
+    #: Increments on reset and seek so a client can discard pre-rebuild frames.
+    generation: int = Field(ge=0)
+    canSeek: bool
+    canStep: bool
+
+
+class ReplayCommand(BaseModel):
+    """A control the browser sends. `commandId` makes every control retry-safe."""
+
+    model_config = ConfigDict(extra="forbid")
+    commandId: str = Field(min_length=8, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    action: ReplayAction
+    speed: Optional[ReplaySpeed] = None
+    timestampNs: Optional[NanoTimestamp] = Field(default=None, ge=0)
+
+
+class ReplayAck(BaseModel):
+    """Every command is answered exactly once, accepted or not, with fresh state."""
+
+    commandId: str
+    action: ReplayAction
+    accepted: bool
+    #: Stable machine-readable rejection code; null when accepted.
+    code: Optional[str] = None
+    message: Optional[str] = None
+    #: True when this ack was replayed from the idempotency cache.
+    duplicate: bool = False
+    status: ReplayStatus
+
+
+class ReplayStatusMessage(BaseModel):
+    type: Literal["replay_status"] = "replay_status"
+    data: ReplayStatus
+
+
+class ReplayAckMessage(BaseModel):
+    type: Literal["replay_ack"] = "replay_ack"
+    data: ReplayAck
+
+
 class PongMessage(BaseModel):
     type: Literal["pong"] = "pong"
     data: None = None
@@ -139,6 +232,8 @@ ServerMessage = Union[
     TradeMessage,
     OrderBookSnapshotMessage,
     OrderBookDeltaMessage,
+    ReplayStatusMessage,
+    ReplayAckMessage,
     PongMessage,
     ErrorMessage,
 ]
@@ -175,5 +270,12 @@ class SnapshotResponse(BaseModel):
     #: Open positions. Not per-symbol: a book spans the account.
     positions: List[Position]
     sequences: Dict[str, int]
-    source: Literal["synthetic", "replay"] = "synthetic"
+    source: Literal["synthetic", "replay", "recorded"] = "synthetic"
     sessionDate: Optional[str] = None
+    #: Playback state at the instant this snapshot was taken, so a hydrating or
+    #: reconnecting client never has to wait for the next status frame.
+    replay: Optional[ReplayStatus] = None
+    #: The session's paper account at the same instant, so one frame makes a
+    #: rebuilt client whole. Its shape is owned by app/paper.py and enforced at
+    #: the browser boundary by PaperAccountSchema rather than mirrored here.
+    account: Optional[Dict[str, Any]] = None

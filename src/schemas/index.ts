@@ -37,7 +37,7 @@ export const TradeSchema = z.object({
   symbol: z.string().min(1).max(10),
   price: z.number().positive(),
   size: z.number().positive(),
-  side: z.enum(['buy', 'sell']),
+  side: z.enum(['buy', 'sell', 'unknown']),
   timestamp: z.number().positive(),
 });
 
@@ -77,6 +77,46 @@ export const PositionSchema = z.object({
   pnlPercent: z.number(),
 });
 
+// ── Replay control protocol (docs/PROTOCOL.md) ────────────────────────────────
+// Nanosecond epochs need 61 bits; a JSON number carries 53. They cross the wire
+// as decimal strings so replay time stays exact on both sides of the boundary.
+export const NanosSchema = z.string().regex(/^\d+$/, 'nanoseconds must be decimal digits');
+export const ReplaySpeedSchema = z.union([z.number().positive(), z.literal('max')]);
+export type ReplaySpeed = z.infer<typeof ReplaySpeedSchema>;
+
+export const ReplayStatusSchema = z.object({
+  protocolVersion: z.number().int().positive(),
+  fixtureId: z.string().min(1),
+  mode: z.enum(['synthetic', 'replay', 'recorded']),
+  unit: z.enum(['event', 'tick']),
+  eventTimeNs: NanosSchema,
+  startNs: NanosSchema,
+  endNs: NanosSchema,
+  speed: ReplaySpeedSchema,
+  speeds: z.array(ReplaySpeedSchema).min(1),
+  playing: z.boolean(),
+  ended: z.boolean(),
+  sequence: z.number().int().nonnegative(),
+  generation: z.number().int().nonnegative(),
+  canSeek: z.boolean(),
+  canStep: z.boolean(),
+});
+export type ReplayStatus = z.infer<typeof ReplayStatusSchema>;
+
+export const ReplayActionSchema = z.enum(['play', 'pause', 'speed', 'step', 'seek', 'reset']);
+export type ReplayAction = z.infer<typeof ReplayActionSchema>;
+
+export const ReplayAckSchema = z.object({
+  commandId: z.string().min(1),
+  action: ReplayActionSchema,
+  accepted: z.boolean(),
+  code: z.string().nullable().optional(),
+  message: z.string().nullable().optional(),
+  duplicate: z.boolean().default(false),
+  status: ReplayStatusSchema,
+});
+export type ReplayAck = z.infer<typeof ReplayAckSchema>;
+
 export const CandleSchema = z.object({
   time: z.number().positive(), open: z.number().positive(), high: z.number().positive(),
   low: z.number().positive(), close: z.number().positive(), volume: z.number().nonnegative(),
@@ -88,19 +128,36 @@ export const SnapshotSchema = z.object({
   trades: z.record(z.string(), z.array(TradeSchema)).optional(),
   positions: z.array(PositionSchema).optional(),
   sequences: z.record(z.string(), z.number().int().nonnegative()),
-  source: z.enum(['synthetic', 'replay']).default('synthetic'),
+  source: z.enum(['synthetic', 'replay', 'recorded']).default('synthetic'),
   sessionDate: z.string().nullable().optional(),
+  replay: ReplayStatusSchema.nullable().optional(),
+  // The server sends the account alongside the market after a rebuild, so one
+  // frame makes a client whole. Its shape is owned by the paper module there
+  // and enforced here, which is the boundary that actually protects the UI.
+  account: PaperAccountSchema.nullable().optional(),
 });
+export type Snapshot = z.infer<typeof SnapshotSchema>;
 
 // ── WebSocket messages (discriminated union on `type`) ────────────────────────
-const WsBase = { symbol: z.string().optional(), sequence: z.number().optional(), requestSnapshot: z.boolean().optional() };
+/** Server send stamp. `emittedNs` is the server's monotonic clock, not a wall
+ *  clock, so it is only ever compared with another `emittedNs`. See
+ *  docs/PERFORMANCE.md. */
+export const FrameStampSchema = z.object({
+  seq: z.number().int().positive(),
+  emittedNs: NanosSchema,
+});
+
+const WsBase = {
+  symbol: z.string().optional(), sequence: z.number().optional(),
+  requestSnapshot: z.boolean().optional(), t: FrameStampSchema.optional(),
+};
 
 export const WsMessageSchema = z.discriminatedUnion('type', [
   z.object({ ...WsBase, type: z.literal('market_data'), data: MarketDataSchema }),
-  z.object({ type: z.literal('account_snapshot'), data: PaperAccountSchema }),
-  z.object({ type: z.literal('candle'), symbol: z.string(), data: CandleSchema }),
-  z.object({ type: z.literal('candle_snapshot'), symbol: z.string(), data: z.array(CandleSchema) }),
-  z.object({ type: z.literal('burst'), data: z.array(MarketDataSchema).max(1000) }),
+  z.object({ ...WsBase, type: z.literal('account_snapshot'), data: PaperAccountSchema }),
+  z.object({ ...WsBase, type: z.literal('candle'), symbol: z.string(), data: CandleSchema }),
+  z.object({ ...WsBase, type: z.literal('candle_snapshot'), symbol: z.string(), data: z.array(CandleSchema) }),
+  z.object({ ...WsBase, type: z.literal('burst'), data: z.array(MarketDataSchema).max(1000) }),
   z.object({ ...WsBase, type: z.literal('order_book_snapshot'), symbol: z.string(), sequence: z.number().int().nonnegative(), data: z.array(OrderBookEntrySchema) }),
   z.object({ ...WsBase, type: z.literal('order_book_delta'), symbol: z.string(), sequence: z.number().int().nonnegative(), data: z.array(OrderBookEntrySchema) }),
   z.object({ ...WsBase, type: z.literal('position_update'), data: PositionSchema }),
@@ -108,7 +165,10 @@ export const WsMessageSchema = z.discriminatedUnion('type', [
   z.object({ ...WsBase, type: z.literal('ping'), data: z.null() }),
   z.object({ ...WsBase, type: z.literal('pong'), data: z.null() }),
   z.object({ ...WsBase, type: z.literal('subscribe'), data: z.null() }),
-  z.object({ ...WsBase, type: z.literal('error'), data: z.object({ message: z.string() }) }),
+  z.object({ ...WsBase, type: z.literal('error'), data: z.object({ message: z.string(), code: z.string().optional(), commandId: z.string().optional() }) }),
+  z.object({ ...WsBase, type: z.literal('snapshot'), data: SnapshotSchema }),
+  z.object({ ...WsBase, type: z.literal('replay_status'), data: ReplayStatusSchema }),
+  z.object({ ...WsBase, type: z.literal('replay_ack'), data: ReplayAckSchema }),
 ]);
 export type WsMessageValidated = z.infer<typeof WsMessageSchema>;
 

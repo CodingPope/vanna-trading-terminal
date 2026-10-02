@@ -12,6 +12,8 @@
  *   F5      Prevent accidental page refresh during trading
  *   ?       Toggle keyboard shortcuts reference modal
  *   Cmd/Ctrl+K  Toggle command palette
+ *   P       Play/pause the replay
+ *   .       Step one replay unit
  *
  * Shortcuts handled in FocusListPanel (list-scoped):
  *   j / k   Navigate focus list up/down
@@ -21,10 +23,14 @@
  */
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useUIStore } from '@/store/uiStore';
-import { useMarketActions } from '@/store/hooks';
+import { useAppDispatch, useAppSelector, useMarketActions } from '@/store/hooks';
+import { sendReplayCommand } from '@/services/replayControl';
 
 
 export function useKeyboard(): void {
+  const dispatch = useAppDispatch();
+  const playing = useAppSelector(s => s.replay.status?.playing ?? false);
+  const canControl = useAppSelector(s => s.replay.status !== null);
   const toggleCommandPalette = useUIStore(s => s.toggleCommandPalette);
   const toggleKeyboardShortcuts = useUIStore(s => s.toggleKeyboardShortcuts);
   const closeAllModals = useUIStore(s => s.closeAllModals);
@@ -60,6 +66,22 @@ export function useKeyboard(): void {
 
   // Cmd/Ctrl+K — command palette
   useHotkeys('mod+k', (e) => { e.preventDefault(); toggleCommandPalette(); }, { preventDefault: true });
+
+  // P / . — replay transport. react-hotkeys-hook already suppresses these while
+  // an <input>, <textarea> or <select> has focus, so typing a quantity into the
+  // order ticket never pauses the market underneath it. Space is deliberately
+  // not used: the focus list already owns it for staging a symbol.
+  useHotkeys('p', (e) => {
+    if (!canControl) return;
+    e.preventDefault();
+    sendReplayCommand(dispatch, playing ? 'pause' : 'play');
+  }, { preventDefault: true }, [canControl, playing, dispatch]);
+
+  useHotkeys('period', (e) => {
+    if (!canControl) return;
+    e.preventDefault();
+    sendReplayCommand(dispatch, 'step');
+  }, { preventDefault: true }, [canControl, dispatch]);
 
   // Esc — close any open modal. Previously handled by a second window listener
   // inside UIProvider, which also double-bound ? and mod+k against the hotkeys

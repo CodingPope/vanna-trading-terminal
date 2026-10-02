@@ -5,7 +5,7 @@ from app import main
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
-        main.accounts.clear()
+        main.registry.sessions.clear()
         self.client = TestClient(main.app)
         self.headers = {'X-Paper-Session': 'session-aaaaaaaaaaaa'}
 

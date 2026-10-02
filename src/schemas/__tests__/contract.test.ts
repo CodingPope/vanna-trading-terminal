@@ -20,6 +20,9 @@ import {
   OrderBookEntrySchema,
   TradeSchema,
   PositionSchema,
+  ReplayStatusSchema,
+  SnapshotSchema,
+  FrameStampSchema,
 } from '../index';
 import samples from './server-samples.json';
 
@@ -29,10 +32,16 @@ describe('server messages satisfy the client schemas', () => {
   it('captured every message type the client handles', () => {
     const types = messages.map(m => (m as { type: string }).type).sort();
     expect(types).toEqual([
+      'account_snapshot',
+      'candle',
+      'candle_snapshot',
       'market_data',
       'order_book_delta',
       'order_book_snapshot',
       'pong',
+      'replay_ack',
+      'replay_status',
+      'snapshot',
       'trade',
     ]);
   });
@@ -50,6 +59,25 @@ describe('server messages satisfy the client schemas', () => {
   });
 });
 
+describe('frame stamps satisfy the client schemas', () => {
+  it('stamps every frame with a gapless sequence and a monotonic send time', () => {
+    const stamps = messages.map(m => (m as { t?: unknown }).t);
+    for (const stamp of stamps) {
+      const result = FrameStampSchema.safeParse(stamp);
+      if (!result.success) throw new Error(JSON.stringify(result.error.issues));
+    }
+    const sequences = stamps.map(s => (s as { seq: number }).seq);
+    expect(new Set(sequences).size).toBe(sequences.length);
+  });
+
+  it('sends the server clock as a string, because it is not a wall clock', () => {
+    // Comparable only with another emittedNs. See docs/PERFORMANCE.md.
+    const stamp = (messages[0] as { t: { emittedNs: unknown } }).t;
+    expect(typeof stamp.emittedNs).toBe('string');
+    expect(FrameStampSchema.safeParse({ seq: 1, emittedNs: 123 }).success).toBe(false);
+  });
+});
+
 describe('snapshot response satisfies the client schemas', () => {
   const snapshot = samples.snapshot as {
     marketData: Record<string, unknown>;
@@ -60,11 +88,15 @@ describe('snapshot response satisfies the client schemas', () => {
 
   it('carries the keys SnapshotService expects', () => {
     expect(Object.keys(snapshot).sort()).toEqual([
+      'account',
       'candlesticks',
       'marketData',
       'orderBooks',
       'positions',
+      'replay',
       'sequences',
+      'sessionDate',
+      'source',
       'trades',
     ]);
   });
@@ -82,9 +114,11 @@ describe('snapshot response satisfies the client schemas', () => {
     }
   });
 
-  it('carries an open position book that parses', () => {
+  it('starts a fresh session flat, and parses any position it does carry', () => {
+    // Positions belong to the paper account, not the market snapshot. A new
+    // session holds none, and inventing some would be a fabricated portfolio.
     const positions = (samples.snapshot as { positions: unknown[] }).positions;
-    expect(positions.length).toBeGreaterThan(0);
+    expect(positions).toEqual([]);
     for (const position of positions) {
       const result = PositionSchema.safeParse(position);
       if (!result.success) {
@@ -119,6 +153,37 @@ describe('snapshot response satisfies the client schemas', () => {
     // which is the whole basis of snapshot-then-delta.
     expect(Object.keys(snapshot.sequences).sort())
       .toEqual(Object.keys(snapshot.orderBooks).sort());
+  });
+
+  it('hydrates playback state, so controls never have to guess before the first frame', () => {
+    const replay = (samples.snapshot as { replay: unknown }).replay;
+    const result = ReplayStatusSchema.safeParse(replay);
+    if (!result.success) {
+      throw new Error(JSON.stringify(result.error.issues));
+    }
+    const status = result.data;
+    expect(status.speeds).toContain(status.speed);
+    expect(BigInt(status.endNs)).toBeGreaterThan(BigInt(status.startNs));
+    expect(BigInt(status.eventTimeNs)).toBeGreaterThanOrEqual(BigInt(status.startNs));
+    expect(BigInt(status.eventTimeNs)).toBeLessThanOrEqual(BigInt(status.endNs));
+  });
+
+  it('keeps replay time exact, which a JSON number could not', () => {
+    // 2026-09-17T00:00:00Z in nanoseconds needs 61 bits; a double carries 53.
+    const exact = '1789678816585999872';
+    expect(ReplayStatusSchema.shape.eventTimeNs.parse(exact)).toBe(exact);
+    expect(String(Number(exact))).not.toBe(exact);
+    expect(ReplayStatusSchema.shape.eventTimeNs.safeParse(1789678816585999872).success).toBe(false);
+  });
+
+  it('carries the paper account, so one rebuild frame makes a client whole', () => {
+    const rebuild = messages.find(m => (m as { type: string }).type === 'snapshot');
+    const result = SnapshotSchema.safeParse((rebuild as { data: unknown }).data);
+    if (!result.success) {
+      throw new Error(JSON.stringify(result.error.issues, null, 2));
+    }
+    expect(result.data.account?.orders).toEqual([]);
+    expect(result.data.replay?.generation).toBeGreaterThan(0);
   });
 
   it('books are sorted best-bid-down, so asks sit above bids', () => {

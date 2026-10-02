@@ -6,9 +6,14 @@ export function useFeedHealth() {
   const received = useAppSelector(s => s.market.lastReceivedAt);
   const now = useAppSelector(s => s.market.stats.lastUpdate);
   const recovering = useAppSelector(s => Object.values(s.orderBook.recovering).some(Boolean));
-  const stale = !received || now - received > 2500;
+  // A paused replay is silent on purpose. Staleness means data we expected and
+  // did not get, so pausing must not read as an unhealthy feed — that would
+  // disable order entry every time a reviewer stopped the clock to look at it.
+  const paused = useAppSelector(s => s.replay.status !== null && !s.replay.status.playing);
+  const stale = !paused && (!received || now - received > 2500);
   const healthy = source === 'live' && connected && !stale && !recovering;
   const status = source === 'connecting' ? 'CONNECTING' : source === 'simulated' ? 'LOCAL SIMULATION'
-    : !connected ? 'DISCONNECTED' : stale ? 'STALE' : recovering ? 'RECOVERING' : 'CONNECTED';
-  return { connected, source, mode, stale, healthy, status, received };
+    : !connected ? 'DISCONNECTED' : stale ? 'STALE' : recovering ? 'RECOVERING'
+    : paused ? 'PAUSED' : 'CONNECTED';
+  return { connected, source, mode, stale, paused, healthy, status, received };
 }

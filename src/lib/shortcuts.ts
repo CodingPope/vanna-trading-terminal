@@ -49,6 +49,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Replay',
+    shortcuts: [
+      { keys: 'P', description: 'Play or pause the replay', scope: 'global' },
+      { keys: '.', description: 'Step one replay unit', scope: 'global' },
+    ],
+  },
+  {
     title: 'System',
     shortcuts: [
       { keys: '⌘K / Ctrl+K', description: 'Command palette', scope: 'global' },

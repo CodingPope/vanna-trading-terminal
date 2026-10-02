@@ -233,6 +233,118 @@ test.describe('terminal', () => {
     await expect(settings.getByText(/symbols?$/)).toBeVisible();
   });
 
+  test('replay controls follow the server rather than the click', async ({ page }) => {
+    await enterTerminal(page);
+    const bar = page.getByRole('group', { name: 'Replay controls' });
+    const state = page.getByTestId('replay-state');
+
+    // Provenance and a moving clock, drawn from the server's own status.
+    await expect(bar.getByTestId('replay-provenance')).toHaveText('SYNTHETIC');
+    const clock = page.getByTestId('replay-clock');
+    const first = await clock.textContent();
+    await expect.poll(async () => clock.textContent(), { timeout: 15_000 }).not.toBe(first);
+
+    // Pause is not applied until the server acknowledges it, and then it holds.
+    await bar.getByRole('button', { name: 'Pause replay' }).click();
+    await expect(bar.getByRole('button', { name: 'Play replay' })).toBeVisible();
+    await expect(state).toHaveText('Paused');
+    const paused = await clock.textContent();
+    await page.waitForTimeout(2000);
+    await expect(clock).toHaveText(paused ?? '');
+
+    // One step is exactly one replay unit, and playback stays paused.
+    await bar.getByRole('button', { name: /^Step one/ }).click();
+    await expect.poll(async () => clock.textContent(), { timeout: 10_000 }).not.toBe(paused);
+    await expect(bar.getByRole('button', { name: 'Play replay' })).toBeVisible();
+
+    // A synthetic session cannot be rewound, and says so instead of pretending.
+    await expect(bar.getByRole('slider', { name: 'Seek through the session' })).toBeDisabled();
+
+    await bar.getByLabel('Playback speed').selectOption('2');
+    await bar.getByRole('button', { name: 'Play replay' }).click();
+    await expect(state).toHaveText('Playing 2x');
+  });
+
+  test('the replay transport answers the keys it advertises', async ({ page }) => {
+    await enterTerminal(page);
+    const state = page.getByTestId('replay-state');
+    await expect(state).toContainText('Playing');
+
+    await page.keyboard.press('p');
+    await expect(state).toHaveText('Paused');
+
+    // Typing into the order ticket must not pause the market underneath it.
+    await page.getByRole('button', { name: 'Play replay' }).click();
+    await expect(state).toContainText('Playing');
+    const quantity = page.getByLabel('Quantity').first();
+    await quantity.click();
+    await quantity.press('p');
+    await expect(state).toContainText('Playing');
+  });
+
+  test('measurements come from real samples and say when there are none', async ({ page }) => {
+    await enterTerminal(page);
+    const panel = page.getByRole('region', { name: 'DEMO & FEED HEALTH' });
+    const readout = panel.getByRole('region', { name: 'Feed measurements' });
+
+    // Percentiles appear once a sampling window has closed, not before.
+    const jitter = readout.locator('[data-metric="transportJitterMs"]');
+    await expect.poll(async () => jitter.count(), { timeout: 20_000 }).toBe(1);
+    await expect.poll(async () => Number(await readout.locator('[data-metric="eventRate"]').innerText()),
+      { timeout: 20_000 }).toBeGreaterThan(0);
+
+    // p50 is a measured value, not a placeholder.
+    const p50 = await jitter.locator('td').first().innerText();
+    expect(p50).not.toBe('—');
+    expect(Number(p50)).not.toBeNaN();
+
+    // Round trip is labelled as a round trip, and the method is stated.
+    await readout.getByText('What these mean').click();
+    await expect(readout).toContainText('One-way latency is not reported');
+    await expect(readout).toContainText('nearest rank');
+
+    // Reset empties the window and says so, rather than showing stale numbers.
+    await readout.getByRole('button', { name: 'Reset measurements' }).click();
+    await expect(page.getByTestId('measurements-empty')).toBeVisible();
+  });
+
+  test('the first route loads cache-cold on a throttled connection', async ({ page, context }) => {
+    // The whole point of splitting the visualization libraries out is that a
+    // first visit does not wait for them. A budget in kilobytes cannot show
+    // that; loading it on a slow line can.
+    await context.clearCookies();
+    const session = await context.newCDPSession(page);
+    await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+    await session.send('Network.emulateNetworkConditions', {
+      offline: false, downloadThroughput: (1.6 * 1024 * 1024) / 8,
+      uploadThroughput: (750 * 1024) / 8, latency: 150,
+    });
+
+    const fetched: string[] = [];
+    page.on('response', response => {
+      if (response.url().includes('/assets/')) fetched.push(response.url().split('/').pop() ?? '');
+    });
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('button', { name: /enter terminal/i }).first())
+      .toBeVisible({ timeout: 30_000 });
+
+    // The orb's three.js chunk is not on the critical path to that button.
+    const beforeInteractive = [...fetched];
+    expect(beforeInteractive.some(name => name.startsWith('DisplacementOrb'))).toBe(false);
+    expect(beforeInteractive.some(name => name.startsWith('OrderBookPanel'))).toBe(false);
+
+    // Entering the terminal is a click, not a reload: the panel chunks arrive
+    // on demand, still on the throttled line.
+    await page.getByRole('button', { name: 'ENTER TERMINAL' }).click();
+    await expect(page.getByRole('region', { name: 'ORDER BOOK' })).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('feed-status')).toHaveText(/CONNECTED|PAUSED/, { timeout: 45_000 });
+
+    await session.send('Network.emulateNetworkConditions', {
+      offline: false, downloadThroughput: -1, uploadThroughput: -1, latency: 0,
+    });
+  });
+
   test('a new paper account starts flat with no invented positions', async ({ page }) => {
     await enterTerminal(page);
     const panel = page.getByRole('region', { name: 'POSITIONS & RISK' });

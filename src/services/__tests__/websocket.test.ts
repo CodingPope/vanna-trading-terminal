@@ -300,6 +300,184 @@ describe('order book sequence validation', () => {
 });
 
 // ── Heartbeat ─────────────────────────────────────────────────────────────────
+// ── Queue coalescing ──────────────────────────────────────────────────────────
+describe('folding superseded frames', () => {
+  /**
+   * Under a flood the queue fills with high-priority frames, and once there is
+   * nothing low-priority left to evict, book deltas start being dropped — each
+   * one costing a snapshot recovery. Folding frames that make each other
+   * redundant buys that room back, but only where it loses nothing.
+   */
+  function trade(symbol: string, id: string) {
+    return { type: 'trade' as const, symbol,
+      data: [{ id, symbol, price: 100, size: 5, side: 'buy' as const, timestamp: 1700000000000 }] };
+  }
+
+  it('keeps only the newest book snapshot for a symbol', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    // Queued in the same tick: nothing drains until the animation frame.
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 2, data: bookEntry(200) });
+    flush();
+
+    const snapshots = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => c[0] as { type: string; payload?: { entries?: { price: number }[] } })
+      .filter(a => a.type.includes('setOrderBook'));
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].payload?.entries?.[0].price).toBe(200);
+    client.destroy();
+  });
+
+  it('never folds a book delta, which is cumulative', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+    flush();
+    ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 2, data: bookEntry(101) });
+    ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 3, data: bookEntry(102) });
+    flush();
+
+    // Both applied, in order: dropping one would silently corrupt the book.
+    const applied = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => (c[0] as { type: string }).type)
+      .filter(t => t.includes('applyDelta'));
+    expect(applied).toHaveLength(2);
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
+    client.destroy();
+  });
+
+  it('concatenates prints for one symbol, keeping their order', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push(trade('AAPL', 'first'));
+    ws.push(trade('AAPL', 'second'));
+    ws.push(trade('NVDA', 'other'));
+    flush();
+
+    const batches = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => c[0] as { type: string; payload?: { symbol: string; trades: { id: string }[] } })
+      .filter(a => a.type.includes('trades/'));
+    const apple = batches.find(b => b.payload?.symbol === 'AAPL');
+    expect(apple?.payload?.trades.map(t => t.id)).toEqual(['first', 'second']);
+    expect(batches.find(b => b.payload?.symbol === 'NVDA')?.payload?.trades).toHaveLength(1);
+    client.destroy();
+  });
+
+  it('folds nothing across symbols', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 1, data: bookEntry(100) });
+    ws.push({ type: 'order_book_snapshot', symbol: 'NVDA', sequence: 1, data: bookEntry(200) });
+    flush();
+
+    const symbols = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => c[0] as { type: string; payload?: { symbol?: string } })
+      .filter(a => a.type.includes('setOrderBook'))
+      .map(a => a.payload?.symbol);
+    expect(symbols).toEqual(['AAPL', 'NVDA']);
+    client.destroy();
+  });
+});
+
+// ── Replay rebuild ────────────────────────────────────────────────────────────
+describe('replay rebuild', () => {
+  function rebuild(sequence: number) {
+    return {
+      type: 'snapshot' as const,
+      data: {
+        marketData: { AAPL: validQuote('AAPL', 100) },
+        orderBooks: { AAPL: bookEntry(100) },
+        candlesticks: { AAPL: [] },
+        trades: { AAPL: [] },
+        positions: [],
+        sequences: { AAPL: sequence },
+        source: 'recorded' as const,
+        sessionDate: '2026-09-17',
+        replay: {
+          protocolVersion: 1, fixtureId: 'fixture:abc', mode: 'recorded' as const,
+          unit: 'event' as const, eventTimeNs: '1789678816585999872',
+          startNs: '1789678816585999000', endNs: '1789678916585999872',
+          speed: 1, speeds: [0.5, 1, 2, 5, 'max'], playing: false, ended: false,
+          sequence: 0, generation: 4, canSeek: true, canStep: true,
+        },
+        account: { epoch: 'e1', revision: 7, initialCash: 100000, cash: 100000,
+          realizedPnl: 0, fees: 0, paused: false, orders: [], executions: [], positions: [] },
+      },
+    };
+  }
+
+  it('reseeds book sequences, so the next delta is not read as a gap', () => {
+    const { client } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push({ type: 'order_book_snapshot', symbol: 'AAPL', sequence: 10, data: bookEntry(100) });
+    flush();
+    // The server rewound. Sequence 2 would be a gap against the old cursor, and
+    // a client that kept counting from 10 would stall the book forever.
+    ws.push(rebuild(1));
+    flush();
+    ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 2, data: bookEntry(101) });
+    flush();
+
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(0);
+    client.destroy();
+  });
+
+  it('still detects a gap after the rebuild, rather than trusting anything', () => {
+    const { client } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push(rebuild(1));
+    flush();
+    ws.push({ type: 'order_book_delta', symbol: 'AAPL', sequence: 4, data: bookEntry(101) });
+    flush();
+
+    expect(ws.sentMessages.filter(m => m.type === 'subscribe')).toHaveLength(1);
+    client.destroy();
+  });
+
+  it('restores the paper account from the same frame', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+    ws.push(rebuild(9));
+    flush();
+
+    const types = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => (c[0] as { type: string }).type);
+    expect(types.some(t => t.includes('receiveAccount'))).toBe(true);
+    client.destroy();
+  });
+
+  it('counts control frames as valid rather than as malformed traffic', () => {
+    const { client, dispatch } = makeClient();
+    const ws = latest();
+    ws.accept();
+
+    ws.push({ type: 'replay_status', data: rebuild(1).data.replay } as unknown as WsMessage);
+    ws.push({ type: 'replay_ack', data: { commandId: 'cmd-0001', action: 'pause', accepted: true,
+      code: null, message: null, duplicate: false, status: rebuild(1).data.replay } } as unknown as WsMessage);
+    vi.advanceTimersByTime(1000);
+
+    const diagnostics = (dispatch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(c => c[0] as { type: string; payload?: { invalid?: number } })
+      .filter(a => a.type.includes('setDiagnostics'));
+    expect(diagnostics.at(-1)?.payload?.invalid).toBe(0);
+    client.destroy();
+  });
+});
+
 describe('heartbeat', () => {
   it('pings on an interval once connected', () => {
     const { client } = makeClient();

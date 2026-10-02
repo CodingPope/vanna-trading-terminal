@@ -1,0 +1,13 @@
+{
+  "note": "Gzipped kilobytes, checked by `yarn budget` against dist/bundle-analysis.json, which the build writes. Raising a limit is a decision, so say why here.",
+  "initialJsGzipKb": 130,
+  "largestAsyncChunkGzipKb": 260,
+  "totalCssGzipKb": 70,
+  "totalGzipKb": 820,
+  "rationale": {
+    "initialJsGzipKb": "Measured 108 kB: React, Redux, Zod, the transport, and the panels that carry no visualization library. Not one of the four heavy libraries is in here \u2014 each sits behind the dynamic import for the panel that uses it. The headroom covers the guided walkthrough and accessibility work still to come.",
+    "largestAsyncChunkGzipKb": "three.js, at 240 kB, inside the market orb chunk. The orb is decorative, loads after the landing page paints, and is never fetched by the terminal route. It stays because it reads live market state and is the first thing a reviewer sees; if it ever blocks a route, it goes.",
+    "totalCssGzipKb": "AG Grid's Quartz theme is 45 kB of this. It ships with the order book panel's chunk, not with the app.",
+    "totalGzipKb": "Everything, including chunks most sessions never fetch. It is here to catch a dependency arriving unnoticed."
+  }
+}

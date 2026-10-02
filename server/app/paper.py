@@ -61,9 +61,20 @@ class PaperError(Exception):
 
 
 class PaperAccount:
-    def __init__(self):
+    def __init__(self, clock_ms=None, deterministic=False):
+        self.clock_ms = clock_ms or (lambda: int(time.time() * 1000))
+        self.deterministic = deterministic
         self.epoch = uuid.uuid4().hex
         self.revision = 0
+        self._clear()
+
+    def reset(self):
+        """Back to a flat account. The epoch survives, so clients see a newer
+        revision of the same account rather than a different one."""
+        self._clear()
+        self.revision += 1
+
+    def _clear(self):
         self.orders: Dict[str, dict] = {}
         self.requests: Dict[str, dict] = {}
         self.holdings: Dict[str, dict] = {}
@@ -78,7 +89,7 @@ class PaperAccount:
     def _risk(self, symbol, quantity, price, quotes, exclude=None):
         if quantity * price > MAX_ORDER:
             return "Order notional exceeds the $50,000 paper limit"
-        gross = sum(abs(p["quantity"]) * money(quotes[s].price) for s, p in self.holdings.items())
+        gross = sum(abs(p["quantity"]) * money(quotes[s].price if s in quotes else p["averageCost"]) for s, p in self.holdings.items())
         reserved = sum((o["quantity"] - o["filledQuantity"]) * money(o["riskPrice"])
                        for o in self.orders.values() if o["status"] in ACTIVE and o["id"] != exclude)
         if gross + reserved + quantity * price > MAX_GROSS:
@@ -102,8 +113,8 @@ class PaperAccount:
         collar = money(touch * (Decimal("1.01") if request.side == "buy" else Decimal("0.99")))
         price = money(request.limitPrice) if request.orderType == "limit" else collar
         reason = self._risk(request.symbol, request.quantity, max(price, touch), quotes)
-        stamp = int(time.time() * 1000) if now is None else now
-        order_id = uuid.uuid4().hex
+        stamp = self.clock_ms() if now is None else now
+        order_id = f"order-{request.clientOrderId}" if self.deterministic else uuid.uuid4().hex
         self.orders[order_id] = {
             **body, "id": order_id, "status": "rejected" if reason else "working",
             "filledQuantity": 0, "averageFillPrice": 0.0, "createdAt": stamp,
@@ -119,7 +130,7 @@ class PaperAccount:
             raise PaperError("Order no longer exists", 404)
         if order["status"] not in ACTIVE:
             return
-        order.update(status="canceled", reason="Canceled by user", updatedAt=int(time.time() * 1000), version=order["version"] + 1)
+        order.update(status="canceled", reason="Canceled by user", updatedAt=self.clock_ms(), version=order["version"] + 1)
         self.revision += 1
 
     def cancel_all(self):
@@ -137,12 +148,14 @@ class PaperAccount:
         remaining = request.quantity - order["filledQuantity"]
         if remaining <= 0:
             raise PaperError("Total quantity must exceed the quantity already filled", 422)
+        if order["symbol"] not in quotes:
+            raise PaperError("Quote unavailable; wait for a valid two-sided market", 409)
         price = max(money(request.limitPrice), money(quotes[order["symbol"]].price))
         reason = self._risk(order["symbol"], remaining, price, quotes, exclude=order_id)
         if reason:
             raise PaperError(reason, 422)
         order.update(quantity=request.quantity, limitPrice=request.limitPrice, riskPrice=float(price),
-                     version=order["version"] + 1, updatedAt=int(time.time() * 1000))
+                     version=order["version"] + 1, updatedAt=self.clock_ms())
         self.revision += 1
 
     def match(self, quotes, now=None):
@@ -154,7 +167,9 @@ class PaperAccount:
         for order in self.orders.values():
             if order["status"] not in ACTIVE:
                 continue
-            q = quotes[order["symbol"]]
+            q = quotes.get(order["symbol"])
+            if q is None:
+                continue
             price = money(q.ask if order["side"] == "buy" else q.bid)
             limit = money(order["limitPrice"] if order["orderType"] == "limit" else order["collar"])
             eligible = price <= limit if order["side"] == "buy" else price >= limit
@@ -162,7 +177,7 @@ class PaperAccount:
                 self._fill(order, min(25, order["quantity"] - order["filledQuantity"]), price)
             if order["status"] in ACTIVE and (order["timeInForce"] == "IOC" or (order["orderType"] == "market" and not eligible)):
                 order.update(status="canceled", reason="IOC remainder" if order["timeInForce"] == "IOC" else "Market price moved outside the 1% collar",
-                             version=order["version"] + 1, updatedAt=int(time.time() * 1000))
+                             version=order["version"] + 1, updatedAt=self.clock_ms())
                 self.revision += 1
         return self.revision != before
 
@@ -183,11 +198,11 @@ class PaperAccount:
         self.fees += fee
         filled = order["filledQuantity"]
         average = (Decimal(str(order["averageFillPrice"])) * filled + price * quantity) / (filled + quantity)
-        stamp = int(time.time() * 1000)
+        stamp = self.clock_ms()
         order.update(filledQuantity=filled + quantity, averageFillPrice=float(average),
                      status="filled" if filled + quantity == order["quantity"] else "partially_filled",
                      version=order["version"] + 1, updatedAt=stamp)
-        self.executions.insert(0, {"id": uuid.uuid4().hex, "orderId": order["id"], "symbol": order["symbol"],
+        self.executions.insert(0, {"id": f"fill-{order['id']}-{filled+quantity}" if self.deterministic else uuid.uuid4().hex, "orderId": order["id"], "symbol": order["symbol"],
                                    "side": order["side"], "quantity": quantity, "price": float(price),
                                    "fee": float(fee), "timestamp": stamp})
         self.executions = self.executions[:500]

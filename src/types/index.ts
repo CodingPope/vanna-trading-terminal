@@ -108,7 +108,7 @@ export interface Trade {
   symbol: string;
   price: number;
   size: number;
-  side: 'buy' | 'sell';
+  side: 'buy' | 'sell' | 'unknown';
   timestamp: number;
 }
 

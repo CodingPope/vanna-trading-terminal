@@ -14,10 +14,12 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:server": "cd server && .venv/bin/python -m unittest discover -s tests -v",
-    "verify": "yarn lint && yarn test:run && yarn test:server && yarn build",
+    "test:server": "cd server && VANNA_DATA_MODE=synthetic VANNA_FIXTURE= .venv/bin/python -m unittest discover -s tests -v",
+    "verify": "yarn lint && yarn test:run && yarn test:server && yarn build && yarn budget",
     "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed"
+    "e2e:headed": "playwright test --headed",
+    "benchmark": "playwright test -c playwright.benchmark.config.ts && node scripts/benchmark-report.mjs > docs/benchmarks/latest.md && node -e \"console.log(require('fs').readFileSync('docs/benchmarks/latest.md','utf8'))\"",
+    "budget": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

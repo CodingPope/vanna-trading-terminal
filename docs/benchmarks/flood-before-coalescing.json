@@ -1,0 +1,168 @@
+{
+  "schema": "vanna-benchmark-v1",
+  "takenAt": "2026-09-18T03:03:52.405Z",
+  "commit": "743c3b367bd7f1263003677aca5e9a7894ec603a",
+  "workingTreeDirty": true,
+  "environment": {
+    "browser": "chromium 151.0.7922.34",
+    "platform": "Darwin 25.5.0 arm64",
+    "cpu": "Apple M1",
+    "cores": 8,
+    "totalMemoryGb": 16,
+    "node": "v24.18.0",
+    "buildMode": "production build behind vite preview"
+  },
+  "scenario": {
+    "warmupMs": 1500,
+    "windowMs": 4000,
+    "speed": "max",
+    "runs": 1,
+    "viewport": "1366x900",
+    "interactions": "symbol rotation NVDA, TSLA, AAPL"
+  },
+  "method": {
+    "window": 512,
+    "percentile": "nearest rank",
+    "protocol": "docs/PERFORMANCE.md"
+  },
+  "fixture": {
+    "fixtureId": "synthetic-seed-7-1789700593790",
+    "mode": "synthetic",
+    "speed": "max",
+    "eventTimeNs": "1789686793790000128",
+    "unit": "tick"
+  },
+  "runs": [
+    {
+      "run": 1,
+      "windowMs": 4000,
+      "warmupMs": 1500,
+      "speed": "max",
+      "heapMb": 16,
+      "takenAt": "2026-09-18T03:03:52.377Z",
+      "environment": {
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36",
+        "viewport": "1280x720"
+      },
+      "replay": {
+        "fixtureId": "synthetic-seed-7-1789700593790",
+        "mode": "synthetic",
+        "speed": "max",
+        "eventTimeNs": "1789686793790000128",
+        "unit": "tick"
+      },
+      "method": {
+        "window": 512,
+        "percentile": "nearest rank",
+        "protocol": "docs/PERFORMANCE.md"
+      },
+      "measurements": {
+        "transportJitterMs": {
+          "count": 512,
+          "p50": -0.028,
+          "p95": 0.07375014305114747,
+          "p99": 0.07825014305114747
+        },
+        "processingMs": {
+          "count": 512,
+          "p50": 9.399999856948853,
+          "p95": 18.59999990463257,
+          "p99": 20
+        },
+        "frameDelayMs": {
+          "count": 4,
+          "p50": 20.700000047683716,
+          "p95": 102.59999990463257,
+          "p99": 102.59999990463257
+        },
+        "roundTripMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "replayLagMs": {
+          "count": 1,
+          "p50": 6000.000128,
+          "p95": 6000.000128,
+          "p99": 6000.000128
+        },
+        "lostFrames": 0,
+        "stampedFrames": 1329,
+        "unstampedFrames": 0,
+        "eventRate": 1327.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "reconnects": 14,
+        "droppedDisplay": 595,
+        "bookGaps": 20,
+        "windowSize": 512
+      }
+    }
+  ],
+  "checks": [
+    {
+      "metric": "frameDelayMs.p99",
+      "value": 102.59999990463257,
+      "limit": 500,
+      "kind": "max",
+      "pass": true
+    },
+    {
+      "metric": "processingMs.p95",
+      "value": 18.59999990463257,
+      "limit": 50,
+      "kind": "max",
+      "pass": true
+    },
+    {
+      "metric": "transportJitterMs.p99",
+      "value": 0.07825014305114747,
+      "limit": 100,
+      "kind": "max",
+      "pass": true
+    },
+    {
+      "metric": "lostFrames",
+      "value": 0,
+      "limit": 0,
+      "kind": "max",
+      "pass": true
+    },
+    {
+      "metric": "bookGaps",
+      "value": 20,
+      "limit": 0,
+      "kind": "max",
+      "pass": false
+    },
+    {
+      "metric": "eventRate",
+      "value": 1327.7,
+      "limit": 100,
+      "kind": "min",
+      "pass": true
+    }
+  ],
+  "stability": [
+    {
+      "metric": "frameDelayMs.p50",
+      "values": [
+        20.700000047683716
+      ],
+      "ratio": 1,
+      "limit": 2,
+      "pass": true
+    },
+    {
+      "metric": "eventRate",
+      "values": [
+        1327.7
+      ],
+      "ratio": 1,
+      "limit": 2,
+      "pass": true
+    }
+  ],
+  "pass": false
+}

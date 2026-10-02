@@ -34,8 +34,7 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-        <span className="header-caps">Trades</span>
+      <div className="flex items-center justify-end px-3 py-2 border-b border-white/5">
         <span className="font-mono text-xs text-vanna-text">{symbol}</span>
       </div>
 
@@ -69,14 +68,14 @@ export function TradesPanel({ symbol: propSymbol }: { symbol?: string }) {
               className="grid grid-cols-[auto_auto_auto_auto] gap-2 px-3 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors"
             >
               <span className="font-mono text-[11px] text-vanna-text-secondary">{fmtTime(trade.timestamp)}</span>
-              <span className={`font-mono text-[11px] text-right ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
+              <span className={`font-mono text-[11px] text-right ${trade.side === 'buy' ? 'text-vanna-green' : trade.side === 'sell' ? 'text-vanna-red' : 'text-vanna-text-secondary'}`}>
                 {trade.price.toFixed(2)}
               </span>
               <span className="font-mono text-[11px] text-vanna-text text-right">
                 {trade.size.toLocaleString()}
               </span>
-              <span className={`font-mono text-[11px] flex items-center justify-end gap-1 ${trade.side === 'buy' ? 'text-vanna-green' : 'text-vanna-red'}`}>
-                {trade.side === 'buy' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+              <span className={`font-mono text-[11px] flex items-center justify-end gap-1 ${trade.side === 'buy' ? 'text-vanna-green' : trade.side === 'sell' ? 'text-vanna-red' : 'text-vanna-text-secondary'}`}>
+                {trade.side === 'buy' ? <ArrowUp className="w-3 h-3" /> : trade.side === 'sell' ? <ArrowDown className="w-3 h-3" /> : null}
                 {trade.side.toUpperCase()}
               </span>
             </div>

@@ -10,16 +10,31 @@ class ReplayTests(unittest.TestCase):
         self.engine = ReplayEngine(fixture_path=Path('/does-not-exist'), seed=7)
 
     def test_snapshot_is_read_only_including_rng(self):
-        old = main.engine
-        main.engine = self.engine
+        key = 'session-readonlyaaaa'
+        main.registry.sessions.clear()
         try:
-            before = (self.engine.states['AAPL'].bar_index, self.engine.states['AAPL'].tick_index, self.engine.rng.getstate())
-            first = asyncio.run(main.snapshot('AAPL'))
-            second = asyncio.run(main.snapshot('AAPL'))
+            engine = main.registry.get(key).market
+            state = engine.states['AAPL']
+            before = (state.bar_index, state.tick_index, engine.rng.getstate())
+            first = asyncio.run(main.snapshot('AAPL', key))
+            second = asyncio.run(main.snapshot('AAPL', key))
             self.assertEqual(first, second)
-            self.assertEqual(before, (self.engine.states['AAPL'].bar_index, self.engine.states['AAPL'].tick_index, self.engine.rng.getstate()))
+            self.assertEqual(before, (state.bar_index, state.tick_index, engine.rng.getstate()))
         finally:
-            main.engine = old
+            main.registry.sessions.clear()
+
+    def test_anonymous_snapshot_never_touches_a_registered_session(self):
+        key = 'session-anonymousaaa'
+        main.registry.sessions.clear()
+        try:
+            session = main.registry.get(key)
+            state = session.market.states['AAPL']
+            before = (state.bar_index, state.tick_index, session.time_ns)
+            asyncio.run(main.snapshot('AAPL', None))
+            self.assertEqual(set(main.registry.sessions), {key})
+            self.assertEqual(before, (state.bar_index, state.tick_index, session.time_ns))
+        finally:
+            main.registry.sessions.clear()
 
     def test_history_is_sorted_and_contains_no_future_bars(self):
         candles = self.engine.candlesticks('AAPL')

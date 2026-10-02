@@ -6,6 +6,10 @@ import { store } from '@/store/store';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { useUIStore } from '@/store/uiStore';
 import { ALL_SHORTCUTS, SHORTCUT_GROUPS } from '../shortcuts';
+import { registerFeed } from '@/services/feedControl';
+import { receiveStatus } from '@/store/slices/replaySlice';
+import type { WebSocketClient } from '@/services/websocket';
+import type { WsMessage } from '@/services/websocket';
 
 /**
  * Keeps the advertised keyboard map honest.
@@ -33,7 +37,7 @@ const mount = () => renderHook(() => useKeyboard(), { wrapper });
  * Omitting it made an event no real keyboard produces, which is how a dead
  * shortcut kept a green test.
  */
-const CODES: Record<string, string> = { '?': 'Slash', '/': 'Slash' };
+const CODES: Record<string, string> = { '?': 'Slash', '/': 'Slash', '.': 'Period', 'p': 'KeyP' };
 
 function press(key: string, init: KeyboardEventInit = {}) {
   act(() => document.dispatchEvent(
@@ -113,6 +117,42 @@ describe('the advertised shortcuts are real', () => {
     press('Tab');
 
     expect(store.getState().market.currentPhase).toBe(before);
+  });
+
+  it('drives the replay on the keys it advertises', () => {
+    const sent: WsMessage[] = [];
+    registerFeed({ send: (m: WsMessage) => sent.push(m) } as unknown as WebSocketClient);
+    store.dispatch(receiveStatus({
+      protocolVersion: 1, fixtureId: 'fixture:abc', mode: 'recorded', unit: 'event',
+      eventTimeNs: '1789678816585999872', startNs: '1789678816585999000',
+      endNs: '1789678916585999872', speed: 1, speeds: [0.5, 1, 2, 5, 'max'],
+      playing: true, ended: false, sequence: 3, generation: 1, canSeek: true, canStep: true,
+    }));
+    mount();
+
+    press('p');
+    press('.');
+
+    expect(sent.map(m => (m.data as { action: string }).action)).toEqual(['pause', 'step']);
+    // Retry safety starts here: every command carries its own identifier.
+    const ids = sent.map(m => (m.data as { commandId: string }).commandId);
+    expect(new Set(ids).size).toBe(2);
+    registerFeed(null);
+  });
+
+  it('leaves the replay alone while an order field has focus', () => {
+    const sent: WsMessage[] = [];
+    registerFeed({ send: (m: WsMessage) => sent.push(m) } as unknown as WebSocketClient);
+    mount();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true })));
+
+    expect(sent).toEqual([]);
+    input.remove();
+    registerFeed(null);
   });
 
   it('groups every shortcut under a titled section', () => {

@@ -1,0 +1,14 @@
+{
+  "note": "Set from the reference run in docs/benchmarks/baseline.json with wide headroom. These catch a major regression — a stream that starts shedding, stalling, or losing frames — not a few milliseconds. A slower CI runner should still pass; if one does not, read the artifact before moving a limit.",
+  "frameDelayMs.p99": { "max": 500 },
+  "processingMs.p95": { "max": 50 },
+  "transportJitterMs.p99": { "max": 100 },
+  "lostFrames": { "max": 0 },
+  "bookGaps": { "max": 0 },
+  "eventRate": { "min": 100 },
+  "runToRunTolerance": {
+    "note": "Two back-to-back runs of one build must agree within this, or the measurement is too noisy to regress against.",
+    "frameDelayMs.p50": { "maxRatio": 2.0 },
+    "eventRate": { "maxRatio": 2.0 }
+  }
+}

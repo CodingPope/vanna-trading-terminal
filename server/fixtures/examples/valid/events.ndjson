@@ -1,0 +1,5 @@
+{"origin":"simulated","reason":"","schema_version":1,"sequence":1,"status":"open","symbol":"AAPL","timestamp_ns":1700000000000000000,"type":"trading_status"}
+{"asks":[{"price_nanos":100010000000,"size":150}],"bids":[{"price_nanos":100000000000,"size":100}],"origin":"simulated","schema_version":1,"sequence":2,"symbol":"AAPL","timestamp_ns":1700000000000000000,"type":"depth_snapshot"}
+{"ask":{"price_nanos":100010000000,"size":150},"bid":{"price_nanos":100000000000,"size":100},"origin":"simulated","schema_version":1,"sequence":3,"symbol":"AAPL","timestamp_ns":1700000000000000000,"type":"quote"}
+{"aggressor":"buy","origin":"simulated","price_nanos":100010000000,"schema_version":1,"sequence":4,"size":25,"symbol":"AAPL","timestamp_ns":1700000000000000000,"type":"trade"}
+{"changes":[{"price_nanos":100010000000,"side":"ask","size":125}],"origin":"simulated","schema_version":1,"sequence":5,"symbol":"AAPL","timestamp_ns":1700000000000000000,"type":"depth_update"}

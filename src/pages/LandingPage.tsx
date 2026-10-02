@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { DisplacementOrb } from '@/components/DisplacementOrb';
+import { lazy, Suspense } from 'react';
+// three.js is the single heaviest dependency here and the orb is decorative,
+// so the landing page paints without it and it arrives afterwards.
+const DisplacementOrb = lazy(() => import('@/components/DisplacementOrb')
+  .then(m => ({ default: m.DisplacementOrb })));
 import { useUIStore } from '@/store/uiStore';
 import { Sparkles } from 'lucide-react';
 
@@ -67,7 +71,9 @@ export function LandingPage() {
 
         {/* 3D Displacement Orb */}
         <div className="py-6">
-          <DisplacementOrb size={360} />
+          <Suspense fallback={<div style={{ width: 360, height: 360 }} aria-hidden="true" />}>
+            <DisplacementOrb size={360} />
+          </Suspense>
         </div>
 
         {/* CTA */}

@@ -175,7 +175,8 @@ class ReplayEngine:
     keeps the engine testable without waiting for wall time.
     """
 
-    def __init__(self, fixture_path: Path = FIXTURE_PATH, seed: int = 7) -> None:
+    def __init__(self, fixture_path: Path = FIXTURE_PATH, seed: int = 7, anchor_ms=None) -> None:
+        self.anchor_ms = anchor_ms
         self.rng = random.Random(seed)
         self.session_date: Optional[str] = None
         self.is_replay = False
@@ -197,7 +198,7 @@ class ReplayEngine:
         # chart's time axis read Nov 2023 next to a footer showing tonight's
         # time. Prices stay reproducible — they come from a seeded RNG — but
         # the timestamps should look like a session that just happened.
-        now_ms = int(time.time() * 1000)
+        now_ms = int(time.time() * 1000) if self.anchor_ms is None else self.anchor_ms
 
         if raw and raw.get("bars"):
             self.is_replay = True

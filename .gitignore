@@ -18,3 +18,13 @@ __pycache__/
 test-results/
 playwright-report/
 blob-report/
+
+# Raw benchmark output. The rendered report and the baseline are committed.
+benchmark/results/
+
+# Optional historical importer environment and private downloads
+server/.venv-import/
+server/fixtures/private/
+
+# Private working notes
+.local/

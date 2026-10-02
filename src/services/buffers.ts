@@ -97,6 +97,16 @@ export class BackpressureQueue<T> {
     return true;
   }
 
+  /**
+   * The oldest queued item matching `predicate`, so a caller holding a frame
+   * that supersedes it can fold the two together instead of queueing both.
+   * Only the caller knows which frames supersede which, so that judgement stays
+   * out of here.
+   */
+  find(predicate: (data: T) => boolean): T | undefined {
+    return this.queue.find(item => predicate(item.data))?.data;
+  }
+
   dequeue(): QueuedMessage<T> | undefined { return this.queue.shift(); }
 
   drainAll(): QueuedMessage<T>[] {
@@ -107,5 +117,7 @@ export class BackpressureQueue<T> {
 
   get length(): number { return this.queue.length; }
   get dropped(): number { return this._dropped; }
+  /** Zeroes the shed count so a diagnostics reset starts a fresh window. */
+  resetDropped(): void { this._dropped = 0; }
   get isEmpty(): boolean { return this.queue.length === 0; }
 }

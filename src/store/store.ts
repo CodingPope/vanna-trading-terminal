@@ -5,6 +5,7 @@ import orderBookReducer from './slices/orderBookSlice';
 import positionsReducer from './slices/positionsSlice';
 import panelsReducer, { persistPanels } from './slices/panelsSlice';
 import tradesReducer from './slices/tradesSlice';
+import replayReducer from './slices/replaySlice';
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     positions: positionsReducer,
     panels: panelsReducer,
     trades: tradesReducer,
+    replay: replayReducer,
   },
 });
 

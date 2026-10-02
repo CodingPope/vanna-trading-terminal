@@ -3,14 +3,26 @@ import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 import { memo, useMemo, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { CellStyleModule, ClientSideRowModelModule, HighlightChangesModule,
+  ModuleRegistry, ValidationModule } from 'ag-grid-community';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 
 // AG Grid v33+ ships nothing by default — without registering modules the grid
 // mounts, logs an error, and renders an empty shell with no rows. Registration
 // lives here rather than at app entry so the panel is self-contained and its
 // tests get a working grid too.
-ModuleRegistry.registerModules([AllCommunityModule]);
+//
+// Named modules rather than AllCommunityModule: this book needs a row model,
+// cell styling, and change flashing, and registering the whole community set
+// for that pulls every grid feature into the bundle. Validation is a
+// development-only helper and is left out of production builds. Sizes are in
+// dist/bundle-analysis.json.
+ModuleRegistry.registerModules([
+  ClientSideRowModelModule,
+  CellStyleModule,
+  HighlightChangesModule,
+  ...(import.meta.env.DEV ? [ValidationModule] : []),
+]);
 import { useSelector } from 'react-redux';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { selectOrderBook, selectMarketData, selectSelectedSymbol } from '@/store/selectors';
@@ -122,12 +134,6 @@ export function OrderBookPanel({ symbol: propSymbol }: OrderBookPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 flex-shrink-0">
-        <span className="header-caps">Order Book</span>
-
-      </div>
-
       {/* Symbol info */}
       <div className="px-3 py-2 border-b border-white/5 flex-shrink-0">
         <div className="flex items-center justify-between">

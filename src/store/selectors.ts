@@ -54,6 +54,9 @@ export const selectFeedSource = (state: RootState) => state.market.feedSource;
 export const selectAllCandlesticks = (state: RootState) => state.market.candlesticks;
 export const selectLastUpdate = (state: RootState) => state.market.lastUpdate;
 
+/** Symbols actually touched by a real feed dispatch. See `MarketSliceState.liveSymbols`. */
+export const selectLiveSymbols = (state: RootState) => state.market.liveSymbols;
+
 /**
  * Market data as a Map, for the few consumers that iterate or `.get()` across
  * every symbol. Memoized on the entities record, so the Map is rebuilt only

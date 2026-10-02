@@ -1,3 +1,4 @@
+import { paperSession } from './paper';
 import { SnapshotSchema } from '@/schemas';
 import type { z } from 'zod';
 type SnapshotResponse = z.infer<typeof SnapshotSchema>;
@@ -16,7 +17,12 @@ export class SnapshotService {
   async fetchSnapshot(symbols: string[]): Promise<SnapshotResponse | null> {
     try {
       const url = `${this.baseUrl}/snapshot?symbols=${symbols.join(',')}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      // 12s, not 5s. The hydration snapshot carries books, candle history and
+      // tape for every requested symbol, and on a throttled first load it was
+      // taking longer than five seconds — so a slow connection silently became
+      // a local simulation. A missing backend still fails fast, because the
+      // connection is refused rather than left hanging.
+      const res = await fetch(url, { headers: { 'X-Paper-Session': paperSession() }, signal: AbortSignal.timeout(12_000) });
       if (!res.ok) throw new Error(`Snapshot HTTP ${res.status}`);
       return SnapshotSchema.parse(await res.json());
     } catch (err) {
