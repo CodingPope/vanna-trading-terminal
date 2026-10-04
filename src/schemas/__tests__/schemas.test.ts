@@ -3,7 +3,6 @@ import {
   MarketDataSchema,
   OrderBookEntrySchema,
   AnaAnalysisSchema,
-  AnaStreamChunkSchema,
   WsMessageSchema,
   PositionSchema,
   MarketRegimeSchema,
@@ -62,25 +61,6 @@ describe('AnaAnalysisSchema', () => {
 
   it('rejects invalid verdict', () => {
     expect(AnaAnalysisSchema.safeParse({ ...valid, verdict: 'MAYBE' }).success).toBe(false);
-  });
-});
-
-// ── AnaStreamChunkSchema ──────────────────────────────────────────────────────
-describe('AnaStreamChunkSchema', () => {
-  it('accepts token chunk', () => {
-    expect(AnaStreamChunkSchema.safeParse({ type: 'token', content: 'Breaking out...' }).success).toBe(true);
-  });
-
-  it('accepts done chunk', () => {
-    expect(AnaStreamChunkSchema.safeParse({ type: 'done' }).success).toBe(true);
-  });
-
-  it('accepts error chunk', () => {
-    expect(AnaStreamChunkSchema.safeParse({ type: 'error', message: 'timeout' }).success).toBe(true);
-  });
-
-  it('rejects unknown type', () => {
-    expect(AnaStreamChunkSchema.safeParse({ type: 'unknown' }).success).toBe(false);
   });
 });
 

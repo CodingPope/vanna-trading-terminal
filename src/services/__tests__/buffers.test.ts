@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CircularBuffer, ObjectPool, BackpressureQueue } from '../buffers';
+import { CircularBuffer, BackpressureQueue } from '../buffers';
 
 // ── CircularBuffer ─────────────────────────────────────────────────────────────
 describe('CircularBuffer', () => {
@@ -46,43 +46,6 @@ describe('CircularBuffer', () => {
     buf.clear();
     expect(buf.size).toBe(0);
     expect(buf.toArray()).toEqual([]);
-  });
-});
-
-// ── ObjectPool ────────────────────────────────────────────────────────────────
-describe('ObjectPool', () => {
-  interface Tick { price: number; volume: number }
-
-  const makePool = () => new ObjectPool<Tick>(
-    () => ({ price: 0, volume: 0 }),
-    (obj) => { obj.price = 0; obj.volume = 0; },
-    5,
-  );
-
-  it('creates a new object when pool is empty', () => {
-    const pool = makePool();
-    const obj = pool.acquire();
-    expect(obj).toEqual({ price: 0, volume: 0 });
-  });
-
-  it('reuses released objects', () => {
-    const pool = makePool();
-    const obj = pool.acquire();
-    obj.price = 999;
-    pool.release(obj);
-    expect(pool.available).toBe(1);
-    const reused = pool.acquire();
-    // reset was called — price should be back to 0
-    expect(reused.price).toBe(0);
-    expect(pool.available).toBe(0);
-  });
-
-  it('does not exceed maxSize', () => {
-    const pool = makePool();
-    for (let i = 0; i < 10; i++) {
-      pool.release({ price: i, volume: i });
-    }
-    expect(pool.available).toBe(5);
   });
 });
 

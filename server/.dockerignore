@@ -1,0 +1,9 @@
+# Licensed recorded data must never reach an image or a remote builder.
+fixtures/private/
+.venv/
+.venv-import/
+__pycache__/
+*.pyc
+tests/
+.env
+.env.*

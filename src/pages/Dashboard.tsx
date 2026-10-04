@@ -12,12 +12,8 @@ import { SettingsDialog } from '@/components/SettingsDialog';
 import { Notifications } from '@/components/Notifications';
 import { WatchlistPanel } from '@/components/panels/WatchlistPanel';
 import { PositionsPanel } from '@/components/panels/PositionsPanel';
-import { AnaPanel } from '@/components/panels/AnaPanel';
 import { FocusListPanel } from '@/components/panels/FocusListPanel';
-import { MorningBriefPanel } from '@/components/panels/MorningBriefPanel';
-import { TickerPanel } from '@/components/panels/TickerPanel';
 import { TradesPanel } from '@/components/panels/TradesPanel';
-import { DepthPanel } from '@/components/panels/DepthPanel';
 import { OrderEntryPanel } from '@/components/panels/OrderEntryPanel';
 import { OrdersPanel } from '@/components/panels/OrdersPanel';
 import { DiagnosticsPanel } from '@/components/panels/DiagnosticsPanel';
@@ -52,16 +48,12 @@ const PANEL_COMPONENTS: Record<Panel['type'], React.ComponentType<PanelComponent
   orders: OrdersPanel,
   diagnostics: DiagnosticsPanel,
   watchlist: WatchlistPanel,
-  ticker: TickerPanel,
   chart: ChartPanel,
   orderbook: OrderBookPanel,
-  depth: DepthPanel,
   'depth-chart': DepthChartPanel,
   trades: TradesPanel,
   positions: PositionsPanel,
-  ana: AnaPanel,
   'focus-list': FocusListPanel,
-  'morning-brief': MorningBriefPanel,
 };
 
 interface DraggablePanelProps {

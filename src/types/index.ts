@@ -127,16 +127,12 @@ export type PanelType =
   | 'orders'
   | 'diagnostics'
   | 'watchlist' 
-  | 'ticker'
   | 'chart' 
   | 'orderbook' 
-  | 'depth'
   | 'depth-chart'
   | 'trades'
   | 'positions' 
-  | 'ana' 
-  | 'focus-list' 
-  | 'morning-brief';
+  | 'focus-list';
 
 export interface Panel {
   id: string;

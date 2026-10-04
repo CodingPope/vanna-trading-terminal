@@ -57,15 +57,6 @@ export const AnaAnalysisSchema = z.object({
   notes: z.string(),
 });
 
-// ── ANA SSE stream chunks (discriminated union on `type`) ─────────────────────
-export const AnaStreamChunkSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('token'), content: z.string() }),
-  z.object({ type: z.literal('analysis'), data: AnaAnalysisSchema }),
-  z.object({ type: z.literal('error'), message: z.string() }),
-  z.object({ type: z.literal('done') }),
-]);
-export type AnaStreamChunk = z.infer<typeof AnaStreamChunkSchema>;
-
 // ── Positions ─────────────────────────────────────────────────────────────────
 export const PositionSchema = z.object({
   symbol: z.string().min(1),

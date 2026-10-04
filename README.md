@@ -100,6 +100,22 @@ Open [http://localhost:5173/#terminal](http://localhost:5173/#terminal). Vite pr
 **/api** and **/ws** to the service on port 8000. If that service is unavailable, the
 UI falls back to a clearly labelled local simulation and disables paper execution.
 
+## Deploy
+
+The UI is static and runs on Vercel; the API is a single long-lived process and runs on
+Fly.io. REST calls go through a Vercel rewrite to the API, so they stay same-origin. Vercel
+cannot proxy a WebSocket, so the browser opens the socket on Fly directly.
+
+1. **API.** From `server/`, run `fly launch --no-deploy` (keep the existing `fly.toml`), set
+   `VANNA_ORIGIN` in it to your Vercel domain, then run `fly deploy --ha=false`. Keep one
+   machine: sessions live in memory.
+2. **UI.** Import the repository in Vercel. If the Fly app is not named `vanna-api`, change
+   the rewrite in `vercel.json`. Set the environment variable
+   `VITE_WS_URL=wss://<your-fly-app>.fly.dev/ws`, then deploy.
+
+`server/.dockerignore` keeps `server/fixtures/private/` out of the image; licensed recorded
+data is never deployed.
+
 ## Current five-minute demo
 
 1. Submit a 150-share market paper order. Watch it become partially filled, cancel the

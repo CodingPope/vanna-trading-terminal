@@ -29,8 +29,14 @@ export interface LiveFeedHandle {
   stop: () => void;
 }
 
-/** Same-origin by default: nginx proxies /api and /ws to the market data service. */
+/**
+ * Same-origin by default: nginx (Docker) and Vite (dev) proxy /ws to the API.
+ * A static host cannot proxy a WebSocket, so a deployment that serves the UI
+ * from one host and the API from another names the socket explicitly.
+ */
 function socketUrl(): string {
+  const configured = import.meta.env.VITE_WS_URL;
+  if (configured) return `${configured}?session=${paperSession()}`;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws?session=${paperSession()}`;
 }

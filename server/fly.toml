@@ -1,0 +1,35 @@
+# Fly.io config for the API. Deploy from this directory: `fly deploy --ha=false`.
+#
+# One machine, always on. Replay sessions and paper accounts live in process
+# memory, so a second machine would split visitors across two disjoint worlds,
+# and a stopped machine would greet a visitor with a cold start long enough to
+# drop the UI into local simulation.
+app = "vanna-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  VANNA_DATA_MODE = "synthetic"
+  # Browser origins allowed to open the WebSocket, comma-separated. Set this to
+  # the Vercel production domain (and any preview domain you want to test).
+  VANNA_ORIGIN = "https://vanna-trading-terminal.vercel.app"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/api/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

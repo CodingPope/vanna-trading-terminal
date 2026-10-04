@@ -282,10 +282,12 @@ async def drain(conn):
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket, session: Optional[str] = Query(default=None, pattern=SESSION_PATTERN)):
-    # Same-origin browsers only. Local scripts may omit Origin.
+    # Same-origin or listed browsers only. Local scripts may omit Origin.
     origin = ws.headers.get("origin")
-    allowed = os.getenv("VANNA_ORIGIN")
-    if origin and origin not in {allowed, f"http://{ws.headers.get('host')}", f"https://{ws.headers.get('host')}"}:
+    # VANNA_ORIGIN lists the cross-origin UIs allowed in, comma-separated: the
+    # deployed UI is on a different host from this API.
+    allowed = {o.strip() for o in os.getenv("VANNA_ORIGIN", "").split(",") if o.strip()}
+    if origin and origin not in allowed | {f"http://{ws.headers.get('host')}", f"https://{ws.headers.get('host')}"}:
         await ws.close(code=1008)
         return
     session = session or uuid.uuid4().hex
